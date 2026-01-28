@@ -1,1 +1,28 @@
-{"shortcuts": {"mouse": "M", "select": "V", "pencil": "P", "rect": "R", "diamond": "D", "ellipse": "E", "arrow": "A", "text": "T", "laser": "L", "eraser": "X", "clear": "C"}, "laser_color": "#ff0000", "laser_thickness": 6, "laser_duration": 5.0, "bangla_font": "Hind Siliguri"}
+{
+  "shortcuts": {
+    "mouse": "M",
+    "select": "V",
+    "pencil": "P",
+    "rect": "R",
+    "diamond": "D",
+    "ellipse": "E",
+    "arrow": "A",
+    "text": "T",
+    "laser": "L",
+    "eraser": "X",
+    "clear": "C",
+    "rectangle": "R",
+    "circle": "C",
+    "highlighter": "H",
+    "zoom": "Z"
+  },
+  "laser_color": "#FF0000",
+  "laser_thickness": 6,
+  "laser_duration": 2.2,
+  "laser_smoothness": 1,
+  "laser_glow": true,
+  "default_thickness": 4,
+  "enable_fill": false,
+  "toolbar_orientation": "horizontal",
+  "current_theme": "Dark"
+}

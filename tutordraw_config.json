@@ -1,1 +1,1 @@
-{"mouse": 86, "pencil": 80, "rect": 82, "diamond": 68, "ellipse": 69, "arrow": 65, "laser": 76, "clear": 67, "screenshot": 83}
+{"shortcuts": {"mouse": "Ctrl+M", "select": "Ctrl+V", "pencil": "Ctrl+P", "rectangle": "Ctrl+R", "diamond": "Ctrl+D", "circle": "Ctrl+C", "arrow": "Ctrl+A", "text": "Ctrl+T", "laser": "Ctrl+L", "eraser": "Ctrl+X", "clear": "Ctrl+Shift+C", "highlighter": "Ctrl+H", "zoom": "Ctrl+Z", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z", "fill": "F"}, "laser_color": "#ff6464", "laser_thickness": 3, "laser_duration": 2.0}
