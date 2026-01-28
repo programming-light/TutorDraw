@@ -3,8 +3,8 @@ Professional FontAwesome icon manager for TutorDraw
 Uses qtawesome for proper icon rendering with theme support
 """
 import qtawesome as qta
-from PySide6.QtGui import QIcon, QColor
-from PySide6.QtCore import Qt
+from PyQt5.QtGui import QIcon, QColor
+from PyQt5.QtCore import Qt
 
 
 class FontAwesomeIconManager:
@@ -65,6 +65,9 @@ class FontAwesomeIconManager:
             'text': 'fa5s.font',           # fa-solid fa-font -> fa5s.font
             'laser': 'fa5s.magic',         # fa-solid fa-wand-sparkles -> fa5s.magic
             'select': 'fa5s.object-group', # fa-solid fa-object-group -> fa5s.object-group
+            'highlighter': 'fa5s.paint-brush', # Using paint brush as highlighter
+            'zoom': 'fa5s.search',         # fa-solid fa-search -> fa5s.search
+            'fill': 'fa5s.fill-drip',      # Using fill-drip for fill tool
             
             # Shapes
             'shapes': 'fa5s.shapes',       # fa-solid fa-shapes -> fa5s.shapes

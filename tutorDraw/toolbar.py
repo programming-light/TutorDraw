@@ -44,7 +44,7 @@ class IconButton(QPushButton):
         """Actually update the icon with the given canvas"""
         try:
             # Use the new simple icon manager
-            from src.modern_icons import icon_manager
+            from tutorDraw.modern_icons import icon_manager
             theme_name = canvas.current_theme
             
             # Update the icon manager theme
@@ -99,24 +99,17 @@ class IconButton(QPushButton):
         """Apply theme-appropriate styling"""
         # Check if parent canvas has theme information
         if hasattr(self.parent(), 'canvas') and hasattr(self.parent().canvas, 'current_theme'):
-            from src.themes_system import theme_manager
+            from tutorDraw.themes_system import theme_manager
             theme_name = self.parent().canvas.current_theme
             theme_data = theme_manager.get_theme_stylesheet(theme_name)
-            
-            # Determine if this is a dark theme
-            dark_themes = ["dark", "deep blue", "jellyfish", "charcoal", "midnight", "night", "deep green"]
-            is_dark_theme = theme_name.lower() in dark_themes
-            
-            # Choose appropriate background colors based on theme
-            active_bg_color = "#403e6d" if is_dark_theme else "#e0dfff"
             
             # Style based on theme
             self.setStyleSheet(f"""
                 QPushButton {{
                     background-color: transparent;
                     border: none;
-                    border-radius: 7px; /* Rounded corners for buttons */
-                    font-size: 16px; /* Smaller font size for modern look */
+                    border-radius: 16px; /* Fully rounded corners for 32x32 button */
+                    font-size: 18px;
                     color: {theme_data['icon_color']};
                     font-weight: 500;
                 }}
@@ -124,11 +117,11 @@ class IconButton(QPushButton):
                     background-color: {theme_data['button_hover']};
                 }}
                 QPushButton:checked {{
-                    background-color: {active_bg_color}; /* Appropriate background for theme */
+                    background-color: {theme_data['highlight_color']};
                 }}
                 QPushButton:pressed {{
-                    background-color: {active_bg_color};
-                    border: 2px solid #817dff; /* Border color when pressed */
+                    background-color: {theme_data['accent_color']};
+                    color: white;
                 }}
             """)
         else:
@@ -137,20 +130,20 @@ class IconButton(QPushButton):
                 QPushButton {
                     background-color: transparent;
                     border: none;
-                    border-radius: 7px; /* Rounded corners for buttons */
-                    font-size: 16px; /* Smaller font size for modern look */
-                    color: #ffffff; /* White icons for default dark-like appearance */
+                    border-radius: 16px; /* Fully rounded corners for 32x32 button */
+                    font-size: 18px;
+                    color: #333333;
                     font-weight: 500;
                 }
                 QPushButton:hover {
                     background-color: #f5f5f5;
                 }
                 QPushButton:checked {
-                    background-color: #403E6a; /* Darker background for dark themes */
+                    background-color: #e3f2fd;
                 }
                 QPushButton:pressed {
-                    background-color: #403E6a;
-                    border: 2px solid #817dff; /* Border color when pressed */
+                    background-color: #6965db;
+                    color: white;
                 }
             """)
 
@@ -259,9 +252,6 @@ class TutorToolbar(QWidget):
             btn.clicked.connect(lambda checked=False, m=mode: self.canvas.set_mode(m))
             inner.addWidget(btn)
             self.btns[mode] = btn
-        
-        # Update tooltips with current shortcuts from canvas
-        self.update_tooltips()
 
         # Fill toggle button
         self.fill_btn = IconButton("fill", "Fill Mode", "")
@@ -275,6 +265,9 @@ class TutorToolbar(QWidget):
         board_btn.clicked.connect(self.canvas.toggle_board)
         inner.addWidget(board_btn)
         self.btns['board'] = board_btn
+        
+        # Update tooltips with current shortcuts from canvas
+        self.update_tooltips()
 
         # Color Palette Panel
         inner.addSpacing(6)
@@ -522,7 +515,7 @@ class TutorToolbar(QWidget):
 
     def update_theme_style(self):
         """Update toolbar styling based on current theme"""
-        from src.themes_system import theme_manager
+        from tutorDraw.themes_system import theme_manager
         theme_data = theme_manager.get_theme_stylesheet(self.canvas.current_theme)
         
         # Update toolbar background
@@ -546,8 +539,8 @@ class TutorToolbar(QWidget):
             
             # Get theme-appropriate border color
             if hasattr(self.canvas, 'current_theme'):
-                from src.themes_system import theme_manager
-                theme_data = theme_manager.get_theme_stylesheet(self.canvas.current_theme)
+                from tutorDraw.themes import get_theme_stylesheet_comprehensive
+                theme_data = get_theme_stylesheet_comprehensive(self.canvas.current_theme)
                 text_color = theme_data["text_color"]
                 border_color = theme_data["border_color"]
             else:

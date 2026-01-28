@@ -43,8 +43,8 @@ class SettingsDialog(QDialog):
         
         self.main_frame = QFrame()
         # Apply theme-aware styling
-        from src.themes_system import theme_manager
-        theme_data = theme_manager.get_theme_stylesheet(getattr(canvas, 'current_theme', 'Light'))
+        from tutorDraw.themes import get_theme_stylesheet_comprehensive
+        theme_data = get_theme_stylesheet_comprehensive(getattr(canvas, 'current_theme', 'Light'))
         bg_color = theme_data["bg_color"]
         text_color = theme_data["text_color"]
         border_color = theme_data["border_color"]
@@ -239,6 +239,5 @@ class SettingsDialog(QDialog):
         new_theme = self.theme_combo.currentText()
         self.canvas.current_theme = new_theme
         # Apply the theme to canvas and all components to refresh icons
-        if hasattr(self.canvas, 'apply_theme'):
-            self.canvas.apply_theme(new_theme)
+        self.canvas.apply_theme(new_theme)
         self.accept()

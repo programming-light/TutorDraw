@@ -5,11 +5,11 @@ import json
 import tempfile
 
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLineEdit, QMessageBox, QColorDialog, QDialog, QDialogButtonBox, QVBoxLayout, QLabel, QComboBox, QShortcut
+    QApplication, QWidget, QLineEdit, QMessageBox, QColorDialog, QDialog, QDialogButtonBox, QVBoxLayout, QLabel, QComboBox
 )
-from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QRect, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QRect
 from PyQt5.QtGui import (
-    QPainter, QPen, QColor, QPainterPath, QFont, QRadialGradient, QBrush, QFontMetrics, QIcon, QKeySequence
+    QPainter, QPen, QColor, QPainterPath, QFont, QRadialGradient, QBrush, QFontMetrics, QIcon
 )
 
 CONFIG_FILE = "tutordraw_settings.json"
@@ -80,14 +80,14 @@ class HideHandle(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         # Import theme manager inside the method to avoid circular imports
-        from src.themes_system import theme_manager
+        from tutorDraw.themes_system import theme_manager
         self.apply_theme(getattr(self.canvas, 'current_theme', 'Light'))
         self.hide()
 
     def apply_theme(self, theme_name):
         """Apply theme to the hide handle"""
         # Import theme manager inside the method to avoid circular imports
-        from src.themes_system import theme_manager
+        from tutorDraw.themes_system import theme_manager
         theme_data = theme_manager.get_theme_stylesheet(theme_name)
         accent_color = theme_data['accent_color']
         icon_color = theme_data['icon_color']
@@ -532,8 +532,8 @@ class TutorCanvas(QWidget):
         self.decrease_font_shortcut.activated.connect(self.decrease_text_size)
 
         # Use original toolbar design with 3-dot menu
-        from src.toolbar import TutorToolbar
-        from src.themes_system import theme_manager
+        from tutorDraw.toolbar import TutorToolbar
+        from tutorDraw.themes_system import theme_manager
         self.toolbar = TutorToolbar(self)
         self.hide_handle = HideHandle(self)
         self.toolbar.show()
@@ -722,7 +722,7 @@ class TutorCanvas(QWidget):
 
     def open_settings(self):
         """Open the settings dialog"""
-        from src.settings import SettingsDialog
+        from tutorDraw.settings import SettingsDialog
         dialog = SettingsDialog(self, self)
         if dialog.exec_():
             self.save_config()
@@ -1030,22 +1030,22 @@ class TutorCanvas(QWidget):
                 # Resize vertically from top edge only
                 new_height = max(10, orig_height - dy)
                 scale_y = new_height / orig_height
-                self.apply_scale_to_shape(1.0, scale_y, self.original_bounding_rect.bottomLeft())
+                self.apply_scale_to_shape(1.0, scale_y, QPointF(self.original_bounding_rect.center().x(), self.original_bounding_rect.bottom()))
             elif self.active_handle == 'bottom-center':
                 # Resize vertically from bottom edge only
                 new_height = max(10, orig_height + dy)
                 scale_y = new_height / orig_height
-                self.apply_scale_to_shape(1.0, scale_y, self.original_bounding_rect.topLeft())
+                self.apply_scale_to_shape(1.0, scale_y, QPointF(self.original_bounding_rect.center().x(), self.original_bounding_rect.top()))
             elif self.active_handle == 'left-center':
                 # Resize horizontally from left edge only
                 new_width = max(10, orig_width - dx)
                 scale_x = new_width / orig_width
-                self.apply_scale_to_shape(scale_x, 1.0, self.original_bounding_rect.topRight())
+                self.apply_scale_to_shape(scale_x, 1.0, QPointF(self.original_bounding_rect.right(), self.original_bounding_rect.center().y()))
             elif self.active_handle == 'right-center':
                 # Resize horizontally from right edge only
                 new_width = max(10, orig_width + dx)
                 scale_x = new_width / orig_width
-                self.apply_scale_to_shape(scale_x, 1.0, self.original_bounding_rect.topLeft())
+                self.apply_scale_to_shape(scale_x, 1.0, QPointF(self.original_bounding_rect.left(), self.original_bounding_rect.center().y()))
     
     def rotate_shape(self, pos):
         """Rotate the selected shape based on mouse movement"""
@@ -1414,8 +1414,8 @@ class TutorCanvas(QWidget):
         """Apply the specified theme to the canvas and all components"""
         self.current_theme = theme_name
         # Import theme manager inside the method to avoid circular imports
-        from src.themes_system import theme_manager
-        theme_data = theme_manager.get_theme_stylesheet(theme_name)
+        from tutorDraw.themes import get_theme_stylesheet_comprehensive
+        theme_data = get_theme_stylesheet_comprehensive(theme_name)
         
         # Apply theme to canvas background
         if self.board_transparent:
