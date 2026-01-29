@@ -83,6 +83,9 @@ class HideHandle(QWidget):
         from src.themes_system import theme_manager
         self.apply_theme(getattr(self.canvas, 'current_theme', 'Light'))
         self.hide()
+        
+        # Animation for toolbar peek
+        self.animation = None
 
     def apply_theme(self, theme_name):
         """Apply theme to the hide handle"""
@@ -99,21 +102,42 @@ class HideHandle(QWidget):
         """)
     
     def mousePressEvent(self, event):
-        self.canvas.peek_toolbar()
+        # Toggle toolbar visibility on click
+        self.canvas.toggle_toolbar_visibility()
     
     def enterEvent(self, event):
+        # Animate toolbar peek on hover
+        if self.canvas.is_hidden:
+            self.canvas.peek_toolbar()
         self.setStyleSheet("""
             background: rgba(105, 101, 219, 1.0);
             border-radius: 15px;
             border: 2px solid white;
         """)
+        
+        # Bring toolbar to front to ensure it's visible
+        if self.canvas.toolbar:
+            self.canvas.toolbar.raise_()
+            self.canvas.toolbar.activateWindow()
     
     def leaveEvent(self, event):
+        # Hide toolbar when leaving if it was peeking
+        if self.canvas.is_hidden:
+            # Delay hiding to allow for toolbar interaction
+            QTimer.singleShot(1000, self.maybe_hide_toolbar)
         self.setStyleSheet("""
             background: rgba(105, 101, 219, 0.9);
             border-radius: 15px;
             border: 2px solid white;
         """)
+    
+    def maybe_hide_toolbar(self):
+        # Only hide the toolbar if neither the toolbar nor the handle is being hovered
+        if (self.canvas.is_hidden and 
+            self.canvas.toolbar and 
+            not self.canvas.toolbar.underMouse() and 
+            not self.underMouse()):
+            self.canvas.toolbar.hide()
 
 class TutorToolbar(QWidget):
     def __init__(self, canvas, orientation="horizontal"):
@@ -457,6 +481,9 @@ class TutorCanvas(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_NoSystemBackground)
         self.setGeometry(QApplication.primaryScreen().geometry())
+        # Ensure canvas can receive keyboard focus
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocus()
         
         # Set window icon with fallback
         import os
@@ -579,10 +606,13 @@ class TutorCanvas(QWidget):
         
     def peek_toolbar(self):
         if self.is_hidden:
+            # Position the toolbar next to the hide handle
             if self.toolbar_orientation == "horizontal":
                 self.toolbar.move(self.hide_handle.x(), self.hide_handle.y() + self.hide_handle.height())
             else:
                 self.toolbar.move(self.hide_handle.x() + self.hide_handle.width(), self.hide_handle.y())
+            
+            # Show the toolbar
             self.toolbar.show()
             self.toolbar.raise_()
             
@@ -592,6 +622,15 @@ class TutorCanvas(QWidget):
         if self.toolbar_last_pos:
             self.toolbar.move(self.toolbar_last_pos)
         self.toolbar.show()
+
+    def toggle_toolbar_visibility(self):
+        """Toggle toolbar between hidden and visible states"""
+        if self.is_hidden:
+            # Toolbar is hidden, show it
+            self.restore_toolbar()
+        else:
+            # Toolbar is visible, hide it
+            self.hide_toolbar_permanent()
 
     def set_mode(self, mode):
         self.mode = mode
@@ -609,6 +648,10 @@ class TutorCanvas(QWidget):
         # Ensure toolbar stays accessible after mode change
         self.toolbar.raise_()
         self.toolbar.activateWindow()
+        
+        # If toolbar was hidden and a tool was selected, hide it again after a delay
+        if self.is_hidden:
+            QTimer.singleShot(500, lambda: self.toolbar.hide() if self.is_hidden and not self.toolbar.underMouse() and not self.hide_handle.underMouse() else None)
 
     def open_color_picker(self):
         d = QColorDialog(self.current_color, self)
@@ -1397,18 +1440,46 @@ class TutorCanvas(QWidget):
         self.update()
 
     def keyPressEvent(self, event):
+        # Handle Ctrl+ combinations for tool switching
+        if event.modifiers() & Qt.ControlModifier:
+            ctrl_pressed = True
+            key_text = event.text().upper() if event.text() else ""
+            
+            # Build the shortcut string
+            if ctrl_pressed and key_text:
+                # Handle Shift modifier
+                if event.modifiers() & Qt.ShiftModifier:
+                    shortcut_str = f"Ctrl+Shift+{key_text}"
+                else:
+                    shortcut_str = f"Ctrl+{key_text}"
+                
+                # Check if this shortcut matches any tool
+                for mode, shortcut in self.shortcuts.items():
+                    if shortcut.upper() == shortcut_str.upper():
+                        self.set_mode(mode)
+                        event.accept()
+                        return
+        
+        # Handle single character shortcuts (fallback)
         key = event.text().upper()
         for mode, shortcut in self.shortcuts.items():
-            if key == shortcut:
+            if key == shortcut.upper():
                 self.set_mode(mode)
+                event.accept()
                 return
         
+        # Handle special keys
         if event.key() == Qt.Key_Escape:
             QApplication.instance().quit()
         elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
             self.undo()
         elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
             self.redo()
+        elif event.key() == Qt.Key_H and event.modifiers() & Qt.ControlModifier and event.modifiers() & Qt.ShiftModifier:
+            # Toggle toolbar hide/unhide with Ctrl+Shift+H
+            self.toggle_toolbar_visibility()
+        else:
+            event.ignore()
 
     def apply_theme(self, theme_name):
         """Apply the specified theme to the canvas and all components"""

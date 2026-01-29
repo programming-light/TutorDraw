@@ -423,26 +423,23 @@ class TutorToolbar(QWidget):
         menu.addSeparator()
         menu.addAction("❌ Exit").triggered.connect(QApplication.instance().quit)
         
-        # Calculate position to show menu above/beside the toolbar based on orientation
-        cursor_pos = QCursor.pos()
-        toolbar_geometry = self.geometry()
-        global_pos = self.mapToGlobal(QPoint(0, 0))
+        # Get the position of the more button to anchor the menu
+        more_btn_global_pos = self.more_btn.mapToGlobal(QPoint(0, 0))
         
-        # Adjust position based on toolbar orientation
+        # Position the menu directly below or beside the more button
         if self.orientation == "horizontal":
-            # For horizontal toolbar, show menu above the toolbar
-            menu_x = cursor_pos.x() - menu.sizeHint().width() // 2
-            menu_y = global_pos.y() - menu.sizeHint().height()
+            # For horizontal toolbar, show menu below the more button
+            menu_x = more_btn_global_pos.x()
+            menu_y = more_btn_global_pos.y() + self.more_btn.height()
         else:
-            # For vertical toolbar, show menu to the side (left if on right side, right if on left side)
-            screen_width = QApplication.desktop().screenGeometry().width()
-            if global_pos.x() > screen_width // 2:
-                # Toolbar is on the right side, show menu to the left
-                menu_x = global_pos.x() - menu.sizeHint().width()
+            # For vertical toolbar, show menu to the side of the more button
+            if more_btn_global_pos.x() > self.canvas.width() // 2:
+                # Toolbar is on the right side, show menu to the left of the button
+                menu_x = more_btn_global_pos.x() - menu.sizeHint().width()
             else:
-                # Toolbar is on the left side, show menu to the right
-                menu_x = global_pos.x() + self.width()
-            menu_y = cursor_pos.y() - menu.sizeHint().height() // 2
+                # Toolbar is on the left side, show menu to the right of the button
+                menu_x = more_btn_global_pos.x() + self.more_btn.width()
+            menu_y = more_btn_global_pos.y()
         
         # Ensure menu stays within screen bounds
         screen_geometry = QApplication.desktop().screenGeometry()
