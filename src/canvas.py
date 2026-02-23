@@ -5,11 +5,11 @@ import json
 import tempfile
 
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLineEdit, QMessageBox, QColorDialog, QDialog, QDialogButtonBox, QVBoxLayout, QLabel, QComboBox, QShortcut
+    QApplication, QWidget, QLineEdit, QMessageBox, QColorDialog, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QShortcut, QSlider
 )
-from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QRect, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QRect, QPoint, QSize, pyqtSignal
 from PyQt5.QtGui import (
-    QPainter, QPen, QColor, QPainterPath, QFont, QRadialGradient, QBrush, QFontMetrics, QIcon, QKeySequence
+    QPainter, QPen, QColor, QPainterPath, QFont, QRadialGradient, QBrush, QFontMetrics, QIcon, QKeySequence, QPolygonF
 )
 
 CONFIG_FILE = "tutordraw_settings.json"
@@ -76,9 +76,34 @@ class HideHandle(QWidget):
     def __init__(self, canvas):
         super().__init__()
         self.canvas = canvas
-        self.setFixedSize(30, 30)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setFixedSize(40, 40)
+        # Position with maximum z-index above all annotations
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        # Ensure it can receive mouse events even with annotations
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setFocusPolicy(Qt.NoFocus)
+        # Maximum priority to stay above all drawing
+        self.setWindowOpacity(1.0)
+        self.raise_()
+        self.activateWindow()
+        print("🔺 Hide handle initialized with maximum z-index")
+        
+        # Create layout for logo with white background
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)  # Small margins for border
+        
+        # Create logo label with white background and rounded border
+        self.logo_label = QLabel()
+        self.logo_label.setFixedSize(36, 36)
+        self.logo_label.setStyleSheet("""
+            background-color: white;
+            border-radius: 7px;
+            border: none;
+        """)
+        self.load_hide_handle_logo()
+        layout.addWidget(self.logo_label)
+        
         # Import theme manager inside the method to avoid circular imports
         from src.themes_system import theme_manager
         self.apply_theme(getattr(self.canvas, 'current_theme', 'Light'))
@@ -86,7 +111,45 @@ class HideHandle(QWidget):
         
         # Animation for toolbar peek
         self.animation = None
+        
+        # State tracking
+        self.is_hovered = False
 
+    def load_hide_handle_logo(self):
+        """Load the PNG logo with white background and rounded border"""
+        logo_loaded = False
+        
+        # Use the PNG logo as requested since SVG isn't showing correctly
+        try:
+            from PyQt5.QtGui import QPixmap
+            import os
+            
+            # Use the PNG file you specified
+            png_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icons', 'tutorDraw-logoX92.png')
+            print(f"Loading PNG logo from: {png_path}")
+            
+            if os.path.exists(png_path):
+                pix = QPixmap(png_path)
+                if not pix.isNull():
+                    # Scale the logo to fit properly
+                    scaled_pixmap = pix.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    self.logo_label.setPixmap(scaled_pixmap)
+                    logo_loaded = True
+                    print("✅ PNG logo loaded successfully for hide handle")
+                else:
+                    print("❌ PNG file is invalid or corrupted")
+            else:
+                print(f"❌ PNG file not found at: {png_path}")
+        except Exception as e:
+            print(f"❌ Failed to load PNG logo: {e}")
+        
+        # Fallback if PNG also fails
+        if not logo_loaded:
+            print("⚠️ Using text fallback - please check PNG file in icons/ folder")
+            self.logo_label.setText("📘")
+            self.logo_label.setAlignment(Qt.AlignCenter)
+            self.logo_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #6965db;")
+    
     def apply_theme(self, theme_name):
         """Apply theme to the hide handle"""
         # Import theme manager inside the method to avoid circular imports
@@ -97,8 +160,9 @@ class HideHandle(QWidget):
         
         self.setStyleSheet(f"""
             background: {accent_color};
-            border-radius: 15px;
+            border-radius: 20px;
             border: 2px solid {icon_color};
+            transition: all 0.3s ease;
         """)
     
     def mousePressEvent(self, event):
@@ -106,38 +170,76 @@ class HideHandle(QWidget):
         self.canvas.toggle_toolbar_visibility()
     
     def enterEvent(self, event):
-        # Animate toolbar peek on hover
-        if self.canvas.is_hidden:
-            self.canvas.peek_toolbar()
+        # Show toolbar immediately on hover
+        self.is_hovered = True
+        
+        # Always show toolbar when hovering - no conditions
+        self.canvas.peek_toolbar_modern()
+        
+        # Enhanced hover styling with white background
         self.setStyleSheet("""
-            background: rgba(105, 101, 219, 1.0);
-            border-radius: 15px;
-            border: 2px solid white;
+            background: white;
+            border-radius: 20px;
+            border: 2px solid #6965db;
         """)
         
-        # Bring toolbar to front to ensure it's visible
+        # Ensure toolbar visibility and focus
         if self.canvas.toolbar:
             self.canvas.toolbar.raise_()
             self.canvas.toolbar.activateWindow()
+            self.canvas.toolbar.show()
+            self.canvas.toolbar.setWindowOpacity(1.0)
+        
+        # Ensure hide handle stays on top of ALL annotations with maximum z-index
+        self.raise_()
+        self.activateWindow()
+        self.setWindowOpacity(1.0)
+        # Force to front
+        self.setParent(None)
+        self.show()
+        
+        # Debug: Print when hover is detected
+        print("🔍 Hide handle hover detected - showing toolbar")
     
     def leaveEvent(self, event):
         # Hide toolbar when leaving if it was peeking
+        self.is_hovered = False
         if self.canvas.is_hidden:
             # Delay hiding to allow for toolbar interaction
-            QTimer.singleShot(1000, self.maybe_hide_toolbar)
+            QTimer.singleShot(1500, self.maybe_hide_toolbar_modern)
+        
+        # Return to normal styling
         self.setStyleSheet("""
             background: rgba(105, 101, 219, 0.9);
-            border-radius: 15px;
+            border-radius: 20px;
             border: 2px solid white;
         """)
     
-    def maybe_hide_toolbar(self):
+    def maybe_hide_toolbar_modern(self):
         # Only hide the toolbar if neither the toolbar nor the handle is being hovered
         if (self.canvas.is_hidden and 
             self.canvas.toolbar and 
             not self.canvas.toolbar.underMouse() and 
-            not self.underMouse()):
-            self.canvas.toolbar.hide()
+            not self.underMouse() and
+            not self.is_hovered):
+            self.canvas.complete_toolbar_hide_modern()
+    
+    def update_hover_state(self, is_hovered):
+        """Update the hover state of the hide handle"""
+        self.is_hovered = is_hovered
+        if is_hovered:
+            self.setStyleSheet("""
+                background: rgba(105, 101, 219, 1.0);
+                border-radius: 20px;
+                border: 2px solid white;
+                transform: scale(1.1);
+            """)
+        else:
+            self.setStyleSheet("""
+                background: rgba(105, 101, 219, 0.9);
+                border-radius: 20px;
+                border: 2px solid white;
+            """)
 
 class TutorToolbar(QWidget):
     def __init__(self, canvas, orientation="horizontal"):
@@ -477,9 +579,11 @@ class SettingsDialog(QDialog):
 class TutorCanvas(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window | Qt.X11BypassWindowManagerHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_NoSystemBackground)
+        # Ensure canvas doesn't interfere with hide handle mouse events
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setGeometry(QApplication.primaryScreen().geometry())
         # Ensure canvas can receive keyboard focus
         self.setFocusPolicy(Qt.StrongFocus)
@@ -498,7 +602,12 @@ class TutorCanvas(QWidget):
         self.current_thickness = 4
         self.default_thickness = 4
         self.enable_fill = False
-        self.board_transparent = True  # Start in annotation mode
+        self.board_transparent = True  # Start in annotation mode (transparent)
+        self.board_mode = "transparent"  # Start with transparent mode
+        self.preferred_board_color = "white"  # Default board color when enabled
+        self.current_text_size = 22
+        self.current_text_bold = False
+        self.current_text_italic = False
         
         # Selection and transformation attributes
         self.active_handle = None  # Which handle is currently being manipulated
@@ -542,8 +651,34 @@ class TutorCanvas(QWidget):
         self.zoom_end_pos = None
         self.is_zoom_active = False
         
-        self.shortcuts = {"mouse": "M", "select": "V", "pencil": "P", "rect": "R", "diamond": "D", "ellipse": "E", "arrow": "A", "text": "T", "laser": "L", "eraser": "X", "clear": "C"}
+        # Initialize with clean global shortcuts - Updated for modern capture
+        self.shortcuts = {
+            "mouse": "Ctrl+Alt+M", "select": "Ctrl+Alt+V", "pencil": "Ctrl+Alt+P", 
+            "rect": "Ctrl+Alt+R", "ellipse": "Ctrl+Alt+E", "arrow": "Ctrl+Alt+A", 
+            "text": "Ctrl+Alt+T", "eraser": "Ctrl+Alt+X", "clear": "Ctrl+Alt+C",
+            "hide_show": "Ctrl+Alt+H", "toggle_board": "Ctrl+Alt+B", "undo": "Ctrl+Alt+Z", 
+            "redo": "Ctrl+Alt+Y", "full_screenshot": "Ctrl+Shift+S", "area_screenshot": "Ctrl+Shift+A",
+            "long_screenshot": "Ctrl+Shift+L", "scrolling_screenshot": "Ctrl+Shift+W",
+            "toggle_recording": "Ctrl+Shift+R", "record_area": "Ctrl+Shift+E",
+            "toggle_fill": "Ctrl+Alt+F"
+        }
+        
+        # Initialize default save paths
+        home_dir = os.path.expanduser("~")
+        
+        # Use a simple approach with Documents as base
+        documents_dir = os.path.join(home_dir, "Documents")
+        self.screenshots_path = os.path.join(documents_dir, "TutorDraw_Screenshots")
+        self.videos_path = os.path.join(documents_dir, "TutorDraw_Videos")
+        
+        # Defer directory creation until needed to avoid startup issues
+        
+        # Force reset to ensure clean state
+        self.force_reset_shortcuts()
         self.load_config()
+        
+        # Setup global keyboard shortcuts
+        self.setup_global_shortcuts()
 
         # Add keyboard shortcuts for text formatting
         self.bold_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
@@ -562,11 +697,21 @@ class TutorCanvas(QWidget):
         from src.toolbar import TutorToolbar
         from src.themes_system import theme_manager
         self.toolbar = TutorToolbar(self)
-        self.hide_handle = HideHandle(self)
+        # Set up system tray instead of hide handle
+        self.setup_system_tray()
+        
+        # Position toolbar initially at top center
+        screen_center = QApplication.primaryScreen().geometry().center()
+        self.toolbar.move(screen_center.x() - self.toolbar.width() // 2, 50)
         self.toolbar.show()
-        self.toolbar.move((self.width() - self.toolbar.width()) // 2, 60)
-        # Ensure toolbar stays on top
         self.toolbar.raise_()
+        
+        # Initialize toolbar state tracking
+        self.toolbar_last_pos = self.toolbar.pos()
+        self.is_hidden = False
+        # System tray starts active
+        
+        # System tray is positioned by the OS
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_canvas)
@@ -580,7 +725,12 @@ class TutorCanvas(QWidget):
             try:
                 with open(CONFIG_FILE, "r") as f:
                     d = json.load(f)
-                    self.shortcuts.update(d.get("shortcuts", {}))
+                    # Load only compatible shortcuts, ignore legacy ones
+                    loaded_shortcuts = d.get("shortcuts", {})
+                    # Only update shortcuts that exist in our new system
+                    for action, key in loaded_shortcuts.items():
+                        if action in self.shortcuts:
+                            self.shortcuts[action] = key
                     self.laser_color = d.get("laser_color", self.laser_color)
                     self.laser_thickness = d.get("laser_thickness", self.laser_thickness)
                     self.laser_duration = d.get("laser_duration", self.laser_duration)
@@ -590,12 +740,54 @@ class TutorCanvas(QWidget):
                     self.enable_fill = d.get("enable_fill", self.enable_fill)
                     self.toolbar_orientation = d.get("toolbar_orientation", self.toolbar_orientation)
                     self.current_theme = d.get("current_theme", self.current_theme)
+                    
+                    # Load save paths
+                    self.screenshots_path = d.get("screenshots_path", self.screenshots_path)
+                    self.videos_path = d.get("videos_path", self.videos_path)
+                    
+                    # Ensure directories exist
+                    os.makedirs(self.screenshots_path, exist_ok=True)
+                    os.makedirs(self.videos_path, exist_ok=True)
             except:
                 pass
+        else:
+            # If no config file exists, ensure we have the latest defaults
+            self.ensure_latest_shortcuts()
+    
+    def force_reset_shortcuts(self):
+        """Force reset all shortcuts to latest format - called during initialization"""
+        self.shortcuts = {
+            "mouse": "Ctrl+Alt+M", "select": "Ctrl+Alt+V", "pencil": "Ctrl+Alt+P", 
+            "rect": "Ctrl+Alt+R", "ellipse": "Ctrl+Alt+E", "arrow": "Ctrl+Alt+A", 
+            "text": "Ctrl+Alt+T", "eraser": "Ctrl+Alt+X", "clear": "Ctrl+Alt+C",
+            "hide_show": "Ctrl+Alt+H", "toggle_board": "Ctrl+Alt+B", "undo": "Ctrl+Alt+Z", 
+            "redo": "Ctrl+Alt+Y", "full_screenshot": "Ctrl+Alt+S", "area_screenshot": "Ctrl+Alt+Shift+S",
+            "long_screenshot": "Ctrl+Alt+L", "scrolling_screenshot": "Ctrl+Alt+Shift+L",
+            "toggle_recording": "Ctrl+Alt+Rec", "record_area": "Ctrl+Alt+Shift+Rec",
+            "toggle_fill": "Ctrl+Alt+F"
+        }
+    
+    def ensure_latest_shortcuts(self):
+        """Ensure shortcuts are updated to the latest format"""
+        latest_shortcuts = {
+            "mouse": "Ctrl+Alt+M", "select": "Ctrl+Alt+V", "pencil": "Ctrl+Alt+P", 
+            "rect": "Ctrl+Alt+R", "ellipse": "Ctrl+Alt+E", "arrow": "Ctrl+Alt+A", 
+            "text": "Ctrl+Alt+T", "eraser": "Ctrl+Alt+X", "clear": "Ctrl+Alt+C",
+            "hide_show": "Ctrl+Alt+H", "toggle_board": "Ctrl+Alt+B", "undo": "Ctrl+Alt+Z", 
+            "redo": "Ctrl+Alt+Y", "full_screenshot": "Ctrl+Alt+S", "area_screenshot": "Ctrl+Alt+Shift+S",
+            "long_screenshot": "Ctrl+Alt+L", "scrolling_screenshot": "Ctrl+Alt+Shift+L",
+            "toggle_recording": "Ctrl+Alt+Rec", "record_area": "Ctrl+Alt+Shift+Rec",
+            "toggle_fill": "Ctrl+Alt+F"
+        }
+        
+        # Update any missing or outdated shortcuts
+        for action, key in latest_shortcuts.items():
+            if action not in self.shortcuts or not self.shortcuts[action].startswith("Ctrl+Alt+"):
+                self.shortcuts[action] = key
 
     def save_config(self):
         with open(CONFIG_FILE, "w") as f:
-            json.dump({"shortcuts": self.shortcuts, "laser_color": self.laser_color, "laser_thickness": self.laser_thickness, "laser_duration": self.laser_duration, "laser_smoothness": self.laser_smoothness, "laser_glow": self.laser_glow, "default_thickness": self.default_thickness, "enable_fill": self.enable_fill, "toolbar_orientation": self.toolbar_orientation, "current_theme": self.current_theme}, f, indent=2)
+            json.dump({"shortcuts": self.shortcuts, "laser_color": self.laser_color, "laser_thickness": self.laser_thickness, "laser_duration": self.laser_duration, "laser_smoothness": self.laser_smoothness, "laser_glow": self.laser_glow, "default_thickness": self.default_thickness, "enable_fill": self.enable_fill, "toolbar_orientation": self.toolbar_orientation, "current_theme": self.current_theme, "screenshots_path": self.screenshots_path, "videos_path": self.videos_path}, f, indent=2)
 
     def hide_toolbar_permanent(self):
         self.is_hidden = True
@@ -624,16 +816,450 @@ class TutorCanvas(QWidget):
         self.toolbar.show()
 
     def toggle_toolbar_visibility(self):
-        """Toggle toolbar between hidden and visible states"""
+        """Toggle toolbar between hidden and visible states with modern animation"""
         if self.is_hidden:
-            # Toolbar is hidden, show it
-            self.restore_toolbar()
+            # Toolbar is hidden, show it with modern expansion
+            self.restore_toolbar_modern()
         else:
-            # Toolbar is visible, hide it
-            self.hide_toolbar_permanent()
+            # Toolbar is visible, hide it with smooth animation
+            self.hide_toolbar_modern()
+    
+    def peek_toolbar_modern(self):
+        """Show toolbar with zero gap from hide handle - attached directly"""
+        # Always show toolbar when hovering, regardless of state
+        if self.toolbar:
+            # Position toolbar exactly at hide handle position (zero gap)
+            handle_pos = self.hide_handle.pos()
+            
+            # Start with toolbar at exact same position as hide handle
+            self.toolbar.move(handle_pos)  # Zero gap positioning
+            self.toolbar.resize(40, 40)  # Start small
+            self.toolbar.setWindowOpacity(0.0)
+            self.toolbar.show()
+            self.toolbar.raise_()
+            self.toolbar.activateWindow()
+            
+            # Animate expansion from exact logo position
+            self.animate_toolbar_expansion_from_logo_position()
+            
+            # Set up auto-hide behavior
+            self.setup_toolbar_auto_hide()
+    
+    def restore_toolbar_modern(self):
+        """Restore toolbar with modern animation and update system tray"""
+        self.is_hidden = False
+        
+        if self.toolbar_last_pos:
+            # Animate from system tray context to last position
+            self.animate_toolbar_restore()
+        else:
+            # Default position
+            screen_center = QApplication.primaryScreen().geometry().center()
+            self.toolbar.move(screen_center.x() - self.toolbar.width() // 2, 50)
+            self.toolbar.show()
+        
+        # Update system tray menu
+        self.update_tray_menu()
+        print("📤 Toolbar restored - system tray updated")
+    
+    def hide_toolbar_modern(self):
+        """Hide toolbar with modern animation and update system tray"""
+        self.is_hidden = True
+        self.toolbar_last_pos = self.toolbar.pos()
+        
+        # Animate toolbar hide
+        self.animate_toolbar_hide()
+        
+        # Update system tray after animation
+        QTimer.singleShot(300, self.show_hide_handle_modern)
+    
+    def show_hide_handle_modern(self):
+        """Update system tray after hiding animation"""
+        # Update system tray menu to reflect hidden state
+        self.update_tray_menu()
+        print("📌 System tray updated for hidden toolbar")
+    
+    def setup_system_tray(self):
+        """Set up system tray icon for hide/show functionality"""
+        try:
+            from PyQt5.QtWidgets import QSystemTrayIcon, QMenu
+            from PyQt5.QtGui import QIcon
+            import os
+            
+            # Create system tray icon
+            self.tray_icon = QSystemTrayIcon(self)
+            
+            # Load the application icon
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icons', 'tutorDraw-logoX92.png')
+            if os.path.exists(icon_path):
+                self.tray_icon.setIcon(QIcon(icon_path))
+                print("✅ System tray icon loaded from PNG")
+            else:
+                # Fallback icon
+                self.tray_icon.setIcon(self.style().standardIcon(self.style().SP_ComputerIcon))
+                print("⚠️ Using fallback system tray icon")
+            
+            # Create context menu
+            tray_menu = QMenu()
+            
+            # Show/Hide action
+            self.toggle_action = tray_menu.addAction("Show Toolbar" if self.is_hidden else "Hide Toolbar")
+            self.toggle_action.triggered.connect(self.toggle_toolbar_from_tray)
+            
+            # Separator
+            tray_menu.addSeparator()
+            
+            # Capture submenu
+            capture_menu = tray_menu.addMenu("📸 Capture")
+            capture_menu.addAction("🖼️ Full Screen").triggered.connect(self.capture_full_screen_screenshot)
+            capture_menu.addAction("✂️ Area Selection").triggered.connect(self.capture_area_screenshot)
+            capture_menu.addAction("🔄 Smart Scrolling").triggered.connect(self.capture_scrolling_screenshot)
+            capture_menu.addAction("💻 Code Editor").triggered.connect(self.capture_code_editor_screenshot)
+            capture_menu.addAction("🖥️ Window Capture").triggered.connect(self.capture_window_screenshot)
+            
+            # Separator
+            tray_menu.addSeparator()
+            
+            # Other actions
+            clear_action = tray_menu.addAction("Clear Canvas")
+            clear_action.triggered.connect(self.clear_canvas)
+            
+            settings_action = tray_menu.addAction("Settings")
+            settings_action.triggered.connect(self.open_settings)
+            
+            tray_menu.addSeparator()
+            
+            exit_action = tray_menu.addAction("Exit")
+            exit_action.triggered.connect(self.close)
+            
+            self.tray_icon.setContextMenu(tray_menu)
+            
+            # Connect tray icon activation (double-click)
+            self.tray_icon.activated.connect(self.tray_icon_activated)
+            
+            # Show the tray icon
+            self.tray_icon.show()
+            print("✅ System tray icon created and shown")
+            
+        except Exception as e:
+            print(f"❌ Failed to create system tray: {e}")
+            self.tray_icon = None
+    
+    def tray_icon_activated(self, reason):
+        """Handle tray icon activation"""
+        from PyQt5.QtWidgets import QSystemTrayIcon
+        if reason == QSystemTrayIcon.Trigger:  # Single click
+            self.show_toolbar_dropdown()
+        elif reason == QSystemTrayIcon.DoubleClick:
+            self.toggle_toolbar_from_tray()
+    
+    def show_toolbar_dropdown(self):
+        """Show toolbar as dropdown from system tray position"""
+        if self.is_hidden:
+            # Show toolbar near system tray
+            self.restore_toolbar_modern()
+            # Position toolbar near system tray area
+            self.position_toolbar_near_tray()
+            self.toggle_action.setText("Hide Toolbar")
+            print("📤 Toolbar shown as dropdown from system tray")
+        else:
+            # Hide toolbar
+            self.hide_toolbar_modern()
+            self.toggle_action.setText("Show Toolbar")
+            print("📥 Toolbar hidden from system tray")
+    
+    def position_toolbar_near_tray(self):
+        """Position toolbar near system tray area"""
+        try:
+            # Get system tray geometry if available
+            if hasattr(self, 'tray_icon') and self.tray_icon:
+                # Try to get tray icon position
+                tray_geometry = self.tray_icon.geometry()
+                if not tray_geometry.isNull():
+                    # Position toolbar below or near the tray icon
+                    x = tray_geometry.x()
+                    y = tray_geometry.y() + tray_geometry.height() + 10
+                    self.toolbar.move(x, y)
+                    print(f"📍 Toolbar positioned near tray at ({x}, {y})")
+                    return
+        except Exception as e:
+            print(f"⚠️ Could not get tray position: {e}")
+        
+        # Fallback: position at top center
+        screen_center = QApplication.primaryScreen().geometry().center()
+        self.toolbar.move(screen_center.x() - self.toolbar.width() // 2, 50)
+        print("📍 Toolbar positioned at screen center (fallback)")
+    
+    def toggle_toolbar_from_tray(self):
+        """Toggle toolbar visibility from system tray"""
+        if self.is_hidden:
+            # Show toolbar
+            self.restore_toolbar_modern()
+            self.toggle_action.setText("Hide Toolbar")
+            print("📤 Toolbar shown from system tray")
+        else:
+            # Hide toolbar
+            self.hide_toolbar_modern()
+            self.toggle_action.setText("Show Toolbar")
+            print("📥 Toolbar hidden from system tray")
+    
+    def update_tray_menu(self):
+        """Update tray menu text based on toolbar state"""
+        if hasattr(self, 'toggle_action'):
+            self.toggle_action.setText("Show Toolbar" if self.is_hidden else "Hide Toolbar")
+    
+    def position_hide_handle_at_screen_corner(self):
+        """Position hide handle at screen corner based on OS"""
+        # Get primary screen geometry
+        screen = QApplication.primaryScreen().geometry()
+        
+        # Position at screen corner (top-left for Windows/Linux, top-right for Mac)
+        import platform
+        if platform.system() == "Darwin":  # macOS
+            # Top-right corner
+            x = screen.width() - self.hide_handle.width() - 20
+            y = 20
+        else:  # Windows/Linux
+            # Top-left corner
+            x = 20
+            y = 20
+            
+        self.hide_handle.move(x, y)
+        # Ensure hide handle is visible and on top
+        self.hide_handle.show()
+        self.hide_handle.raise_()
+        self.hide_handle.activateWindow()
+        print(f"📍 Hide handle positioned at: ({x}, {y})")
+    
+    def setup_toolbar_auto_hide(self):
+        """Set up auto-hide behavior - hide when mouse leaves or tool is selected"""
+        # Cancel any existing hide timer
+        if hasattr(self, 'toolbar_hide_timer') and self.toolbar_hide_timer:
+            self.toolbar_hide_timer.stop()
+        
+        # Create new timer for auto-hide
+        self.toolbar_hide_timer = QTimer(self)
+        self.toolbar_hide_timer.timeout.connect(self.check_toolbar_auto_hide)
+        self.toolbar_hide_timer.start(100)  # Check every 100ms
+    
+    def check_toolbar_auto_hide(self):
+        """Check if toolbar should auto-hide (system tray version)"""
+        # Hide if mouse is not over toolbar (no hide handle in system tray mode)
+        if (self.toolbar and not self.toolbar.underMouse() and self.is_hidden):
+            self.toolbar_hide_timer.stop()
+            self.toolbar.hide()
+        
+        # Also hide if a tool has been selected
+        if (self.toolbar and not self.is_hidden and 
+            hasattr(self, 'previous_mode') and self.previous_mode != self.mode):
+            self.toolbar_hide_timer.stop()
+            self.hide_toolbar_modern()
+    
+    def complete_toolbar_hide_modern(self):
+        """Complete the toolbar hiding process"""
+        if self.is_hidden and self.toolbar:
+            self.toolbar.hide()
+    
+    def animate_toolbar_expansion_from_logo_position(self):
+        """Animate toolbar expanding from exact logo position to full toolbar"""
+        if not self.toolbar:
+            return
+            
+        # Get target position (toolbar's last known position)
+        target_pos = self.toolbar_last_pos if self.toolbar_last_pos else QPoint(100, 100)
+        target_width = self.toolbar.sizeHint().width()
+        target_height = self.toolbar.sizeHint().height()
+        
+        # Current position and size (starting from exact logo position)
+        start_pos = self.toolbar.pos()  # Exact same as hide handle position
+        start_width = 40
+        start_height = 40
+        
+        # Calculate the offset to align the toolbar logo with the hide handle logo
+        # The toolbar logo is typically at a specific offset within the toolbar
+        logo_offset_x = 8  # Approximate offset of logo within toolbar (adjust as needed)
+        logo_offset_y = 4  # Approximate offset of logo within toolbar (adjust as needed)
+        
+        # Adjust target position so that toolbar logo aligns with hide handle logo
+        adjusted_target_pos = QPoint(
+            target_pos.x() - logo_offset_x,
+            target_pos.y() - logo_offset_y
+        )
+        
+        # Animate over 25 steps for smoother transition
+        steps = 25
+        duration = 350  # 350ms for smoother animation
+        
+        for i in range(steps + 1):
+            QTimer.singleShot(int(i * duration / steps), 
+                            lambda step=i: self.animate_logo_expansion_step(
+                                start_pos, adjusted_target_pos, 
+                                start_width, target_width,
+                                start_height, target_height,
+                                step, steps
+                            ))
+    
+    def animate_logo_expansion_step(self, start_pos, target_pos, start_width, target_width, 
+                                   start_height, target_height, step, total_steps):
+        """Single step of logo-to-toolbar expansion animation"""
+        if step <= total_steps and self.toolbar:
+            ratio = step / total_steps
+            
+            # Calculate intermediate position
+            x = start_pos.x() + (target_pos.x() - start_pos.x()) * ratio
+            y = start_pos.y() + (target_pos.y() - start_pos.y()) * ratio
+            
+            # Calculate intermediate size (non-linear for more natural feel)
+            # Start slow, accelerate in middle, slow down at end
+            if ratio < 0.5:
+                size_progress = 0.5 * (ratio * 2) ** 2  # Quadratic easing in
+            else:
+                size_progress = 0.5 + 0.5 * (1 - (1 - (ratio - 0.5) * 2) ** 2)  # Quadratic easing out
+            
+            width = int(start_width + (target_width - start_width) * size_progress)
+            height = int(start_height + (target_height - start_height) * size_progress)
+            
+            # Apply transformations
+            self.toolbar.move(int(x), int(y))
+            self.toolbar.resize(width, height)
+            
+            # Opacity animation with easing
+            opacity = min(1.0, ratio * 1.5)  # Slightly faster fade in
+            self.toolbar.setWindowOpacity(opacity)
+            
+            # Update toolbar content
+            self.toolbar.update()
+        elif step > total_steps:
+            # Animation complete - ensure final state
+            self.toolbar.resize(target_width, target_height)
+            self.toolbar.move(target_pos)
+            self.toolbar.setWindowOpacity(1.0)
+            self.toolbar.update()
+    
+    def animate_expansion_step(self, start_pos, target_pos, start_width, target_width, 
+                              start_height, target_height, step, total_steps):
+        """Single step of the expansion animation (legacy method)"""
+        if step <= total_steps and self.toolbar:
+            ratio = step / total_steps
+            
+            # Calculate intermediate position
+            x = start_pos.x() + (target_pos.x() - start_pos.x()) * ratio
+            y = start_pos.y() + (target_pos.y() - start_pos.y()) * ratio
+            
+            # Calculate intermediate size
+            width = int(start_width + (target_width - start_width) * ratio)
+            height = int(start_height + (target_height - start_height) * ratio)
+            
+            # Apply transformations
+            self.toolbar.move(int(x), int(y))
+            self.toolbar.resize(width, height)
+            
+            # Opacity animation
+            opacity = min(1.0, ratio * 2)  # Fade in faster
+            self.toolbar.setWindowOpacity(opacity)
+            
+            # Update toolbar content
+            self.toolbar.update()
+        elif step > total_steps:
+            # Animation complete - ensure final state
+            self.toolbar.resize(target_width, target_height)
+            self.toolbar.move(target_pos)
+            self.toolbar.setWindowOpacity(1.0)
+            self.toolbar.update()
+    
+    def animate_toolbar_expansion(self):
+        """Animate toolbar expansion when peeking (legacy method)"""
+        # Simple opacity animation for now
+        self.toolbar.setWindowOpacity(0.0)
+        self.toolbar.show()
+        
+        # Fade in animation
+        for i in range(11):
+            QTimer.singleShot(i * 20, lambda opacity=i/10.0: self.toolbar.setWindowOpacity(opacity))
+    
+    def animate_toolbar_hide(self):
+        """Animate toolbar hiding (system tray version)"""
+        # Simple fade out animation for system tray
+        if self.toolbar:
+            # Fade out animation
+            self.toolbar.setWindowOpacity(0.0)
+            self.toolbar.hide()
+            
+            # Complete the hiding process
+            self.complete_toolbar_hide_modern()
+    
+    def animate_step_hide_with_shrink(self, start_pos, end_pos, start_size, end_size, step, total_steps):
+        """Single step of hide animation with size reduction"""
+        if step <= total_steps and self.toolbar:
+            ratio = step / total_steps
+            
+            # Calculate intermediate position
+            x = start_pos.x() + (end_pos.x() - start_pos.x()) * ratio
+            y = start_pos.y() + (end_pos.y() - start_pos.y()) * ratio
+            
+            # Calculate intermediate size
+            width = int(start_size.width() + (end_size.width() - start_size.width()) * ratio)
+            height = int(start_size.height() + (end_size.height() - start_size.height()) * ratio)
+            
+            # Apply transformations
+            self.toolbar.move(int(x), int(y))
+            self.toolbar.resize(width, height)
+            
+            # Opacity animation
+            opacity = 1.0 - (ratio * 0.8)  # Don't fade out completely until end
+            self.toolbar.setWindowOpacity(opacity)
+            
+            # Update toolbar content
+            self.toolbar.update()
+        elif step > total_steps:
+            # Final hide
+            self.toolbar.hide()
+    
+    def animate_step_hide(self, start_pos, end_pos, step, total_steps):
+        """Single step of hide animation (legacy method)"""
+        if step <= total_steps and self.toolbar:
+            # Calculate intermediate position
+            ratio = step / total_steps
+            x = start_pos.x() + (end_pos.x() - start_pos.x()) * ratio
+            y = start_pos.y() + (end_pos.y() - start_pos.y()) * ratio
+            self.toolbar.move(int(x), int(y))
+            
+            # Fade out
+            opacity = 1.0 - ratio
+            self.toolbar.setWindowOpacity(opacity)
+        elif step > total_steps:
+            self.toolbar.hide()
+    
+    def animate_toolbar_restore(self):
+        """Animate toolbar restoration (system tray version)"""
+        if self.toolbar and self.toolbar_last_pos:
+            # Position at last position
+            self.toolbar.move(self.toolbar_last_pos)
+            self.toolbar.setWindowOpacity(0.0)
+            self.toolbar.show()
+            
+            # Simple fade in animation
+            for i in range(11):
+                QTimer.singleShot(i * 30, lambda opacity=i/10.0: self.toolbar.setWindowOpacity(opacity))
+    
+    def animate_step_restore(self, start_pos, end_pos, step, total_steps):
+        """Single step of restore animation"""
+        if step <= total_steps and self.toolbar:
+            # Calculate intermediate position
+            ratio = step / total_steps
+            x = start_pos.x() + (end_pos.x() - start_pos.x()) * ratio
+            y = start_pos.y() + (end_pos.y() - start_pos.y()) * ratio
+            self.toolbar.move(int(x), int(y))
+            
+            # Fade in
+            opacity = ratio
+            self.toolbar.setWindowOpacity(opacity)
 
     def set_mode(self, mode):
+        # Track previous mode for auto-hide detection
+        self.previous_mode = getattr(self, 'mode', None)
         self.mode = mode
+        
         if mode != "text" and self.input_box:
             self.finish_text(self.input_box_pos)
         self.setWindowFlag(Qt.WindowTransparentForInput, mode == "mouse")
@@ -649,9 +1275,9 @@ class TutorCanvas(QWidget):
         self.toolbar.raise_()
         self.toolbar.activateWindow()
         
-        # If toolbar was hidden and a tool was selected, hide it again after a delay
-        if self.is_hidden:
-            QTimer.singleShot(500, lambda: self.toolbar.hide() if self.is_hidden and not self.toolbar.underMouse() and not self.hide_handle.underMouse() else None)
+        # If toolbar was hidden and a tool was selected, hide it automatically
+        if self.is_hidden and self.previous_mode != self.mode:
+            QTimer.singleShot(300, self.hide_toolbar_modern)
 
     def open_color_picker(self):
         d = QColorDialog(self.current_color, self)
@@ -665,25 +1291,934 @@ class TutorCanvas(QWidget):
             self.update()
     
     def toggle_board(self):
-        """Toggle between transparent annotation and whiteboard mode"""
-        self.board_transparent = not self.board_transparent
-        if self.board_transparent:
+        """Toggle between transparent annotation and board mode (with configurable color)"""
+        # Toggle between transparent and current board color
+        if self.board_mode == "transparent":
+            # Switch to preferred board color
+            self.board_mode = getattr(self, 'preferred_board_color', 'white')
+            # Set the background to the preferred board color
+            if self.board_mode == "white":
+                self.setStyleSheet("background-color: white;")
+            elif self.board_mode == "black":
+                self.setStyleSheet("background-color: black;")
+            else:  # default to white
+                self.board_mode = "white"
+                self.setStyleSheet("background-color: white;")
+            # Remove translucent background for solid color
+            self.setAttribute(Qt.WA_TranslucentBackground, False)
+        else:
+            # Switch back to transparent annotation mode
+            self.board_mode = "transparent"
             # Transparent annotation mode
             self.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
-        else:
-            # Whiteboard mode
-            self.setStyleSheet("background-color: rgba(255, 255, 255, 220);")
+            # Restore translucent background for transparency
+            self.setAttribute(Qt.WA_TranslucentBackground, True)
+        
+        # Keep the board button icon constant (don't change when clicked)
+        if hasattr(self, 'toolbar') and hasattr(self.toolbar, 'btns') and 'board' in self.toolbar.btns:
+            board_btn = self.toolbar.btns['board']
+            # Do not change the icon - let the icon manager handle the SVG icon consistently
+        
         self.hide()
         self.show()
     
+    def quick_toggle_board(self):
+        """Quick toggle board without showing options (for keyboard shortcut)"""
+        # If no preferred color is set, default to white
+        if not hasattr(self, 'preferred_board_color'):
+            self.preferred_board_color = 'white'
+        self.toggle_board()
+    
+    def set_board_color(self, color):
+        """Set the preferred board color (white or black)"""
+        self.preferred_board_color = color
+        # If currently in board mode, update the background color
+        if self.board_mode != "transparent":
+            if color == "white":
+                self.setStyleSheet("background-color: white;")
+            elif color == "black":
+                self.setStyleSheet("background-color: black;")
+            self.board_mode = color
+            self.hide()
+            self.show()
+    
+    def set_line_style(self, style):
+        """Set the current line drawing style (solid, dashed, hand_drawn)"""
+        self.current_line_style = style
+        # Update current tool to use new line style
+        # This will affect the next shape drawn
+        
+    def setup_global_shortcuts(self):
+        """Setup global keyboard shortcuts that work even when app is in background"""
+        from PyQt5.QtWidgets import QShortcut
+        from PyQt5.QtGui import QKeySequence
+        
+        # Create global shortcuts with Ctrl+Alt combinations to avoid conflicts
+        # Tool switching shortcuts
+        self.shortcut_pencil = QShortcut(QKeySequence("Ctrl+Alt+P"), self)
+        self.shortcut_pencil.activated.connect(lambda: self.set_mode("pencil"))
+        
+        self.shortcut_rect = QShortcut(QKeySequence("Ctrl+Alt+R"), self)
+        self.shortcut_rect.activated.connect(lambda: self.set_mode("rect"))
+        
+        self.shortcut_ellipse = QShortcut(QKeySequence("Ctrl+Alt+E"), self)
+        self.shortcut_ellipse.activated.connect(lambda: self.set_mode("ellipse"))
+        
+        self.shortcut_arrow = QShortcut(QKeySequence("Ctrl+Alt+A"), self)
+        self.shortcut_arrow.activated.connect(lambda: self.set_mode("arrow"))
+        
+        self.shortcut_text = QShortcut(QKeySequence("Ctrl+Alt+T"), self)
+        self.shortcut_text.activated.connect(lambda: self.set_mode("text"))
+        
+        self.shortcut_eraser = QShortcut(QKeySequence("Ctrl+Alt+X"), self)
+        self.shortcut_eraser.activated.connect(lambda: self.set_mode("eraser"))
+        
+        self.shortcut_select = QShortcut(QKeySequence("Ctrl+Alt+V"), self)
+        self.shortcut_select.activated.connect(lambda: self.set_mode("select"))
+        
+        self.shortcut_mouse = QShortcut(QKeySequence("Ctrl+Alt+M"), self)
+        self.shortcut_mouse.activated.connect(lambda: self.set_mode("mouse"))
+        
+        # Hide/Unhide shortcut
+        self.shortcut_toggle_visibility = QShortcut(QKeySequence("Ctrl+Alt+H"), self)
+        self.shortcut_toggle_visibility.activated.connect(self.toggle_toolbar_visibility)
+        
+        # Board toggle shortcut
+        self.shortcut_toggle_board = QShortcut(QKeySequence("Ctrl+Alt+B"), self)
+        self.shortcut_toggle_board.activated.connect(self.quick_toggle_board)
+        
+        # Undo/Redo shortcuts
+        self.shortcut_undo = QShortcut(QKeySequence("Ctrl+Alt+Z"), self)
+        self.shortcut_undo.activated.connect(self.undo)
+        
+        self.shortcut_redo = QShortcut(QKeySequence("Ctrl+Alt+Y"), self)
+        self.shortcut_redo.activated.connect(self.redo)
+        
+        # Clear canvas shortcut
+        self.shortcut_clear = QShortcut(QKeySequence("Ctrl+Alt+C"), self)
+        self.shortcut_clear.activated.connect(self.clear_canvas)
+        
+        # Screenshot shortcuts
+        self.shortcut_full_screenshot = QShortcut(QKeySequence("Ctrl+Alt+S"), self)
+        self.shortcut_full_screenshot.activated.connect(self.capture_full_screen_screenshot)
+        
+        self.shortcut_area_screenshot = QShortcut(QKeySequence("Ctrl+Alt+Shift+S"), self)
+        self.shortcut_area_screenshot.activated.connect(self.capture_area_screenshot)
+        
+        self.shortcut_long_screenshot = QShortcut(QKeySequence("Ctrl+Alt+L"), self)
+        self.shortcut_long_screenshot.activated.connect(self.capture_scrolling_screenshot)
+        
+        self.shortcut_scrolling_screenshot = QShortcut(QKeySequence("Ctrl+Alt+Shift+L"), self)
+        self.shortcut_scrolling_screenshot.activated.connect(self.capture_scrolling_screenshot)
+        
+        # Recording shortcuts
+        self.shortcut_record_toggle = QShortcut(QKeySequence("Ctrl+Alt+Rec"), self)
+        self.shortcut_record_toggle.activated.connect(self.toggle_recording)
+        
+        self.shortcut_record_area = QShortcut(QKeySequence("Ctrl+Alt+Shift+Rec"), self)
+        self.shortcut_record_area.activated.connect(self.record_area)
+        
+        # Fill mode toggle
+        self.shortcut_toggle_fill = QShortcut(QKeySequence("Ctrl+Alt+F"), self)
+        self.shortcut_toggle_fill.activated.connect(self.toggle_fill_color)
+        
+        # Make shortcuts work even when window is not focused
+        self.setAttribute(Qt.WA_KeyCompression, False)
+        self.setAttribute(Qt.WA_InputMethodEnabled, True)
+        
+        # Ensure the window can receive keyboard events
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        
+        # Set focus policy to ensure keyboard events are received
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocus()
+        
+        # Ensure window stays responsive
+        self.raise_()
+        self.activateWindow()
+        
+        # Timer to periodically ensure window focus
+        self.focus_timer = QTimer(self)
+        self.focus_timer.timeout.connect(self.ensure_window_focus)
+        self.focus_timer.start(1000)  # Check every second
+    
+    def ensure_window_focus(self):
+        """Ensure the window can receive keyboard shortcuts"""
+        if not self.isActiveWindow():
+            self.raise_()
+            self.activateWindow()
+    
+    def set_text_size(self, size):
+        """Set the current text size"""
+        self.current_text_size = size
+        self.size_value_label.setText(str(size))
+        # Update the input box if it exists
+        if self.input_box:
+            self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: {size}px; padding: 5px;")
+    
+    def toggle_text_bold(self):
+        """Toggle bold text formatting"""
+        self.current_text_bold = self.bold_btn.isChecked()
+        # Update the input box if it exists
+        if self.input_box:
+            font_weight = "bold" if self.current_text_bold else "normal"
+            font_style = "italic" if self.current_text_italic else "normal"
+            self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: {self.current_text_size}px; font-weight: {font_weight}; font-style: {font_style}; padding: 5px;")
+    
+    def toggle_text_italic(self):
+        """Toggle italic text formatting"""
+        self.current_text_italic = self.italic_btn.isChecked()
+        # Update the input box if it exists
+        if self.input_box:
+            font_weight = "bold" if self.current_text_bold else "normal"
+            font_style = "italic" if self.current_text_italic else "normal"
+            self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: {self.current_text_size}px; font-weight: {font_weight}; font-style: {font_style}; padding: 5px;")
+    
+    def toggle_fill_color(self):
+        """Toggle fill color for shapes"""
+        self.enable_fill = not self.enable_fill
+        # Update the fill button appearance if it exists
+        if hasattr(self, 'toolbar') and hasattr(self.toolbar, 'btns') and 'fill' in self.toolbar.btns:
+            fill_btn = self.toolbar.btns['fill']
+            if self.enable_fill:
+                fill_btn.setStyleSheet(fill_btn.styleSheet() + " background-color: lightblue;")
+            else:
+                # Reset to default style
+                fill_btn.setStyleSheet("")
+    
+    def capture_full_screen_screenshot(self):
+        """Capture full screen screenshot with enhanced controls"""
+        try:
+            from src.smart_capture import SmartScrollCapture
+            
+            # Initialize smart capture
+            self.smart_capture = SmartScrollCapture(self)
+            
+            # Create capture controls if not exists
+            if not hasattr(self, 'capture_controls') or self.capture_controls is None:
+                from src.capture_controls import CaptureControlsWindow
+                self.capture_controls = CaptureControlsWindow(self)
+                self.capture_controls.show()
+                self.capture_controls.raise_()
+                self.capture_controls.activateWindow()
+            
+            # Start capture
+            self.capture_controls.start_capture("fullscreen")
+            
+            # Perform capture
+            filepath = self.smart_capture.capture_full_screenshot()
+            
+            # Update controls
+            self.capture_controls.add_captured_section({"type": "full", "path": filepath})
+            
+            print(f"✅ Full screen screenshot saved: {filepath}")
+            self.capture_controls.status_indicator.setText("✓ COMPLETE")
+            
+        except Exception as e:
+            error_msg = f"Full screen capture failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            if hasattr(self, 'capture_controls'):
+                self.capture_controls.update_status("✗ ERROR", "#ff6b6b")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+        
+    def capture_area_screenshot(self):
+        """Capture area screenshot with selection"""
+        try:
+            from src.smart_capture import SmartScrollCapture
+            
+            # Initialize smart capture
+            self.smart_capture = SmartScrollCapture(self)
+            
+            # Create capture controls
+            if not hasattr(self, 'capture_controls') or self.capture_controls is None:
+                from src.capture_controls import CaptureControlsWindow
+                self.capture_controls = CaptureControlsWindow(self)
+                self.capture_controls.show()
+                self.capture_controls.raise_()
+                self.capture_controls.activateWindow()
+            
+            # Start capture
+            self.capture_controls.start_capture("area")
+            
+            # For area capture, we'd need area selection logic
+            # This is a simplified version
+            filepath = self.smart_capture.capture_area_screenshot()
+            
+            # Update controls
+            self.capture_controls.add_captured_section({"type": "area", "path": filepath})
+            
+            print(f"✅ Area screenshot saved: {filepath}")
+            self.capture_controls.status_indicator.setText("✓ COMPLETE")
+            
+        except Exception as e:
+            error_msg = f"Area capture failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            if hasattr(self, 'capture_controls'):
+                self.capture_controls.update_status("✗ ERROR", "#ff6b6b")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+        
+    def capture_scrolling_screenshot(self):
+        """Enhanced scrolling screenshot with interactive controls"""
+        try:
+            # Import enhanced components
+            from src.window_selector import WindowSelector
+            from src.interactive_capture import InteractiveCaptureControls
+            from src.auto_scroller import EnhancedAutoScroller
+            
+            # Create window selector
+            self.window_selector = WindowSelector()
+            self.window_selector.window_selected.connect(self.on_window_selected_for_scrolling)
+            self.window_selector.selection_cancelled.connect(self.on_selection_cancelled)
+            self.window_selector.show()
+            self.window_selector.raise_()
+            self.window_selector.activateWindow()
+            
+            print("🎯 Window selection mode activated for scrolling capture")
+            
+        except Exception as e:
+            error_msg = f"Scrolling capture setup failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+            
+    def on_window_selected_for_scrolling(self, area):
+        """Handle window selection for scrolling capture"""
+        try:
+            from src.interactive_capture import InteractiveCaptureControls
+            from src.auto_scroller import EnhancedAutoScroller
+            
+            # Create interactive capture controls
+            self.interactive_controls = InteractiveCaptureControls()
+            self.interactive_controls.show()
+            self.interactive_controls.raise_()
+            self.interactive_controls.activateWindow()
+            
+            # Create auto scroller
+            self.auto_scroller = EnhancedAutoScroller()
+            
+            # Connect signals
+            self.interactive_controls.start_capture.connect(self.start_interactive_scrolling)
+            self.interactive_controls.pause_capture.connect(self.auto_scroller.pause_capture)
+            self.interactive_controls.resume_capture.connect(self.auto_scroller.resume_capture)
+            self.interactive_controls.stop_capture.connect(self.auto_scroller.stop_capture)
+            self.interactive_controls.save_capture.connect(self.save_current_capture)
+            self.interactive_controls.cancel_capture.connect(self.cancel_interactive_capture)
+            self.interactive_controls.scroll_speed_changed.connect(self.auto_scroller.set_scroll_speed)
+            
+            self.auto_scroller.scroll_progress.connect(
+                lambda current, total: self.interactive_controls.update_progress(current)
+            )
+            self.auto_scroller.capture_completed.connect(self.on_capture_completed)
+            self.auto_scroller.capture_error.connect(self.on_capture_error)
+            
+            # Set the capture area
+            self.auto_scroller.set_capture_area(area)
+            
+            print(f"✅ Interactive scrolling capture ready for area: {area}")
+            
+        except Exception as e:
+            error_msg = f"Interactive capture setup failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+            
+    def start_interactive_scrolling(self, mode, area):
+        """Start the interactive scrolling capture"""
+        try:
+            if hasattr(self, 'auto_scroller'):
+                self.auto_scroller.start_capture(area)
+                print("🔄 Interactive scrolling capture started")
+        except Exception as e:
+            error_msg = f"Failed to start scrolling capture: {str(e)}"
+            print(f"❌ {error_msg}")
+            self.on_capture_error(error_msg)
+            
+    def save_current_capture(self):
+        """Save the current capture state"""
+        try:
+            if hasattr(self, 'auto_scroller'):
+                info = self.auto_scroller.get_capture_info()
+                print(f"💾 Capture saved - Sections: {info['sections_captured']}, Position: {info['scroll_position']}")
+                # The auto scroller handles the actual saving
+        except Exception as e:
+            print(f"Save error: {e}")
+            
+    def cancel_interactive_capture(self):
+        """Cancel the interactive capture"""
+        try:
+            if hasattr(self, 'auto_scroller'):
+                self.auto_scroller.stop_capture()
+            if hasattr(self, 'interactive_controls'):
+                self.interactive_controls.reset_controls()
+                self.interactive_controls.close()
+            print("⏹ Interactive capture cancelled")
+        except Exception as e:
+            print(f"Cancel error: {e}")
+            
+    def on_selection_cancelled(self):
+        """Handle window selection cancellation"""
+        print("❌ Window selection cancelled")
+            
+    def capture_code_editor_screenshot(self):
+        """Capture code editor with smart scrolling"""
+        try:
+            # Use the enhanced scrolling capture for code editors
+            self.capture_scrolling_screenshot()
+            print("💻 Code editor capture mode activated")
+            
+        except Exception as e:
+            error_msg = f"Code editor capture failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+            
+    def capture_window_screenshot(self):
+        """Capture specific window with selection"""
+        try:
+            from src.window_selector import WindowSelector
+            
+            # Create window selector
+            self.window_selector = WindowSelector()
+            self.window_selector.window_selected.connect(self.on_window_selected_for_capture)
+            self.window_selector.selection_cancelled.connect(self.on_selection_cancelled)
+            self.window_selector.show()
+            self.window_selector.raise_()
+            self.window_selector.activateWindow()
+            
+            print("🎯 Window selection mode activated")
+            
+        except Exception as e:
+            error_msg = f"Window capture setup failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+            
+    def on_window_selected_for_capture(self, area):
+        """Handle window selection for regular capture"""
+        try:
+            from src.smart_capture import SmartScrollCapture
+            
+            # Initialize smart capture
+            self.smart_capture = SmartScrollCapture(self)
+            
+            # Create capture controls
+            if not hasattr(self, 'capture_controls') or self.capture_controls is None:
+                from src.capture_controls import CaptureControlsWindow
+                self.capture_controls = CaptureControlsWindow(self)
+                self.capture_controls.show()
+                self.capture_controls.raise_()
+                self.capture_controls.activateWindow()
+            
+            # Start capture
+            self.capture_controls.start_capture("window")
+            
+            # Capture the selected window area
+            filepath = self.smart_capture.capture_area_screenshot(area)
+            
+            # Update controls
+            self.capture_controls.add_captured_section({"type": "window", "path": filepath})
+            
+            print(f"✅ Window screenshot saved: {filepath}")
+            self.capture_controls.status_indicator.setText("✓ COMPLETE")
+            
+        except Exception as e:
+            error_msg = f"Window capture failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            if hasattr(self, 'capture_controls'):
+                self.capture_controls.update_status("✗ ERROR", "#ff6b6b")
+            QMessageBox.critical(self, "Capture Error", error_msg)
+            
+    def on_capture_completed(self, filepaths):
+        """Handle capture completion"""
+        if hasattr(self, 'capture_controls'):
+            self.capture_controls.update_status("✓ COMPLETE", "#6bff8c")
+            self.capture_controls.capture_timer.stop()
+            
+        # Show completion message
+        files_text = "\n".join(filepaths)
+        QMessageBox.information(self, "Capture Complete", 
+                              f"Capture completed successfully!\n\nFiles saved:\n{files_text}")
+        
+        print(f"✅ Capture completed. Files: {filepaths}")
+        
+    def on_capture_error(self, error_msg):
+        """Handle capture error"""
+        if hasattr(self, 'capture_controls'):
+            self.capture_controls.update_status("✗ ERROR", "#ff6b6b")
+            self.capture_controls.capture_timer.stop()
+            
+        QMessageBox.critical(self, "Capture Error", error_msg)
+        print(f"❌ Capture error: {error_msg}")
+        
+    def toggle_recording(self):
+        """Toggle screen recording on/off"""
+        print("Recording toggled")
+        # Implementation would go here
+        
+    def record_area(self):
+        """Record specific area"""
+        print("Area recording started")
+        # Implementation would go here
+    
+    def create_sidebar(self):
+        """Create left sidebar for board options like Excalidraw"""
+        from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame
+        from PyQt5.QtCore import Qt
+        
+        # Create sidebar widget
+        self.sidebar = QWidget(self)
+        self.sidebar.setFixedWidth(280)
+        self.sidebar.setStyleSheet("""
+            QWidget {
+                background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, 
+                                              stop: 0 #ffffff, 
+                                              stop: 1 #f8f9fa);
+                border-radius: 16px;
+                margin: 8px 8px 8px 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Header
+        header = QLabel("Board Settings")
+        header.setStyleSheet("font-size: 18px; font-weight: 600; color: #2d2d2d; padding-bottom: 8px;")
+        layout.addWidget(header)
+        
+        # Separator
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.HLine)
+        sep1.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep1)
+        
+        # Canvas color options
+        color_label = QLabel("Canvas Color:")
+        color_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(color_label)
+        
+        white_btn = QPushButton("⬜ White")
+        white_btn.setStyleSheet("""
+            QPushButton {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #f8f9fa;
+                border: 1px solid #d0d0d0;
+            }
+        """)
+        white_btn.clicked.connect(lambda: self.set_board_color("white"))
+        layout.addWidget(white_btn)
+        
+        black_btn = QPushButton("⬛ Black")
+        black_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                color: white;
+                border: 1px solid #404040;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #3a3a3a;
+                border: 1px solid #505050;
+            }
+        """)
+        black_btn.clicked.connect(lambda: self.set_board_color("black"))
+        layout.addWidget(black_btn)
+        
+        # Separator
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep2)
+        
+        # Fill options
+        fill_label = QLabel("Shape Fill:")
+        fill_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(fill_label)
+        
+        self.fill_toggle_btn = QPushButton("☐ Enable Fill" if not self.enable_fill else "☑ Disable Fill")
+        self.fill_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border: 1px solid #dee2e6;
+            }
+        """)
+        
+        def toggle_fill():
+            self.toggle_fill_color()
+            self.fill_toggle_btn.setText("☐ Enable Fill" if not self.enable_fill else "☑ Disable Fill")
+        
+        self.fill_toggle_btn.clicked.connect(toggle_fill)
+        layout.addWidget(self.fill_toggle_btn)
+        
+        # Separator
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.HLine)
+        sep3.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep3)
+        
+        # Line style options
+        line_style_label = QLabel("Line Style:")
+        line_style_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(line_style_label)
+        
+        # Line style buttons
+        solid_line_btn = QPushButton("— Solid")
+        solid_line_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border: 1px solid #dee2e6;
+            }
+        """)
+        solid_line_btn.clicked.connect(lambda: self.set_line_style("solid"))
+        layout.addWidget(solid_line_btn)
+        
+        dashed_line_btn = QPushButton("- - Dashed")
+        dashed_line_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border: 1px solid #dee2e6;
+            }
+        """)
+        dashed_line_btn.clicked.connect(lambda: self.set_line_style("dashed"))
+        layout.addWidget(dashed_line_btn)
+        
+        hand_drawn_line_btn = QPushButton("~ ~ Hand-drawn")
+        hand_drawn_line_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border: 1px solid #dee2e6;
+            }
+        """)
+        hand_drawn_line_btn.clicked.connect(lambda: self.set_line_style("hand_drawn"))
+        layout.addWidget(hand_drawn_line_btn)
+        
+        # Separator
+        sep4 = QFrame()
+        sep4.setFrameShape(QFrame.HLine)
+        sep4.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep4)
+        
+        # Additional drawing options
+        drawing_options_label = QLabel("Drawing Options:")
+        drawing_options_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(drawing_options_label)
+        
+        # Board toggle button
+        board_toggle_btn = QPushButton("📊 Toggle Board")
+        board_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 10px 12px;
+                text-align: left;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border: 1px solid #dee2e6;
+            }
+        """)
+        board_toggle_btn.clicked.connect(self.toggle_board)
+        layout.addWidget(board_toggle_btn)
+        
+        # Separator
+        sep5 = QFrame()
+        sep5.setFrameShape(QFrame.HLine)
+        sep5.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep5)
+        
+        # Text formatting options
+        text_label = QLabel("Text Options:")
+        text_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(text_label)
+        
+        # Text size slider
+        size_layout = QHBoxLayout()
+        size_label = QLabel("Size:")
+        size_label.setStyleSheet("font-size: 12px; color: #555;")
+        size_layout.addWidget(size_label)
+        
+        self.size_slider = QSlider(Qt.Horizontal)
+        self.size_slider.setRange(10, 72)
+        self.size_slider.setValue(22)
+        self.size_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #e9ecef;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #6965db;
+                border: 1px solid #5c58c8;
+                width: 18px;
+                margin: -6px 0;
+                border-radius: 9px;
+            }
+        """)
+        self.size_slider.valueChanged.connect(self.set_text_size)
+        size_layout.addWidget(self.size_slider)
+        
+        self.size_value_label = QLabel("22")
+        self.size_value_label.setStyleSheet("font-size: 12px; color: #555; min-width: 30px;")
+        size_layout.addWidget(self.size_value_label)
+        
+        layout.addLayout(size_layout)
+        
+        # Text style buttons
+        style_layout = QHBoxLayout()
+        self.bold_btn = QPushButton("B")
+        self.bold_btn.setCheckable(True)
+        self.bold_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 5px 10px;
+                font-weight: bold;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:checked {
+                background-color: #6965db;
+                color: white;
+                border: 1px solid #5c58c8;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+            }
+        """)
+        self.bold_btn.clicked.connect(self.toggle_text_bold)
+        style_layout.addWidget(self.bold_btn)
+        
+        self.italic_btn = QPushButton("I")
+        self.italic_btn.setCheckable(True)
+        self.italic_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                padding: 5px 10px;
+                font-style: italic;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:checked {
+                background-color: #6965db;
+                color: white;
+                border: 1px solid #5c58c8;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+            }
+        """)
+        self.italic_btn.clicked.connect(self.toggle_text_italic)
+        style_layout.addWidget(self.italic_btn)
+        
+        layout.addLayout(style_layout)
+        
+        # Separator
+        sep6 = QFrame()
+        sep6.setFrameShape(QFrame.HLine)
+        sep6.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep6)
+        
+        # Keyboard Shortcuts
+        shortcuts_label = QLabel("Global Keyboard Shortcuts:")
+        shortcuts_label.setStyleSheet("font-weight: 600; margin-top: 10px; font-size: 14px; color: #3a3a3a;")
+        layout.addWidget(shortcuts_label)
+        
+        # Create shortcut info labels
+        shortcuts_info = [
+            ("Ctrl+Alt+P", "Pencil Tool"),
+            ("Ctrl+Alt+R", "Rectangle Tool"),
+            ("Ctrl+Alt+E", "Ellipse Tool"),
+            ("Ctrl+Alt+A", "Arrow Tool"),
+            ("Ctrl+Alt+T", "Text Tool"),
+            ("Ctrl+Alt+X", "Eraser Tool"),
+            ("Ctrl+Alt+V", "Select Tool"),
+            ("Ctrl+Alt+M", "Mouse Tool"),
+            ("Ctrl+Alt+H", "Hide/Show Toolbar"),
+            ("Ctrl+Alt+B", "Toggle Board"),
+            ("Ctrl+Alt+Z", "Undo"),
+            ("Ctrl+Alt+Y", "Redo"),
+            ("Ctrl+Alt+C", "Clear Canvas"),
+            ("Ctrl+Alt+S", "Full Screen Screenshot"),
+            ("Ctrl+Alt+Shift+S", "Area Screenshot"),
+            ("Ctrl+Alt+L", "Long Screenshot"),
+            ("Ctrl+Alt+Shift+L", "Scrolling Screenshot"),
+            ("Ctrl+Alt+Rec", "Start/Stop Recording"),
+            ("Ctrl+Alt+Shift+Rec", "Record Area"),
+            ("Ctrl+Alt+F", "Toggle Fill Mode")
+        ]
+        
+        for key, action in shortcuts_info:
+            shortcut_layout = QHBoxLayout()
+            key_label = QLabel(key)
+            key_label.setStyleSheet("font-weight: bold; color: #6965db; min-width: 80px;")
+            shortcut_layout.addWidget(key_label)
+            
+            action_label = QLabel(f"→ {action}")
+            action_label.setStyleSheet("font-size: 12px; color: #555;")
+            shortcut_layout.addWidget(action_label)
+            
+            layout.addLayout(shortcut_layout)
+        
+        # Separator
+        sep7 = QFrame()
+        sep7.setFrameShape(QFrame.HLine)
+        sep7.setStyleSheet("color: #e9ecef; margin: 10px 0px;")
+        layout.addWidget(sep7)
+        
+        # Reset button
+        reset_btn = QPushButton("↺ Reset to Defaults")
+        reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: 1px solid #c82323;
+                padding: 12px 16px;
+                font-weight: bold;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+                border: 1px solid #b21f2d;
+            }
+        """)
+        
+        def reset_defaults():
+            # Reset board to white (don't make it transparent)
+            self.board_mode = "white"
+            self.preferred_board_color = "white"
+            self.setStyleSheet("background-color: white;")
+            self.setAttribute(Qt.WA_TranslucentBackground, False)
+            # Reset fill mode
+            self.enable_fill = False
+            # Update UI
+            if hasattr(self, 'fill_toggle_btn'):
+                self.fill_toggle_btn.setText("☐ Enable Fill")
+            if hasattr(self, 'toolbar') and hasattr(self.toolbar, 'btns') and 'board' in self.toolbar.btns:
+                self.toolbar.btns['board'].setText("⬜")
+            self.hide()
+            self.show()
+        
+        reset_btn.clicked.connect(reset_defaults)
+        layout.addWidget(reset_btn)
+        
+        # Spacer
+        layout.addStretch()
+        
+        self.sidebar.setLayout(layout)
+        
+        # Position sidebar on left side with padding for rounded corners
+        self.sidebar.move(8, 8)
+        self.sidebar.resize(280, self.height() - 16)
+        self.sidebar.show()
+        
+        return self.sidebar
+    
+    def toggle_sidebar(self):
+        """Toggle the sidebar visibility"""
+        if not hasattr(self, 'sidebar'):
+            self.create_sidebar()
+            self.sidebar.show()
+        elif self.sidebar.isVisible():
+            self.sidebar.hide()
+        else:
+            self.sidebar.show()
+    
+    def show_board_options(self):
+        """Show board options sidebar"""
+        if not hasattr(self, 'sidebar'):
+            self.create_sidebar()
+        self.sidebar.show()
+    
+    def create_shapes_submenu(self):
+        """Create shapes submenu for the more menu"""
+        from PyQt5.QtWidgets import QMenu
+        
+        shapes_menu = QMenu("_shapes", self)
+        
+        # Add various shape options
+        shapes_menu.addAction("🔺 Triangle").triggered.connect(lambda: self.set_mode("triangle"))
+        shapes_menu.addAction("🔷 Hexagon").triggered.connect(lambda: self.set_mode("hexagon"))
+        shapes_menu.addAction("🔶 Pentagon").triggered.connect(lambda: self.set_mode("pentagon"))
+        shapes_menu.addAction("🔷 Octagon").triggered.connect(lambda: self.set_mode("octagon"))
+        shapes_menu.addAction("🔷 Star").triggered.connect(lambda: self.set_mode("star"))
+        shapes_menu.addAction("🔷 Arrow (Double)").triggered.connect(lambda: self.set_mode("double_arrow"))
+        shapes_menu.addAction("🔷 Curved Arrow").triggered.connect(lambda: self.set_mode("curved_arrow"))
+        shapes_menu.addAction("🔷 Cloud").triggered.connect(lambda: self.set_mode("cloud"))
+        shapes_menu.addAction("🔷 Callout").triggered.connect(lambda: self.set_mode("callout"))
+        shapes_menu.addAction("🔷 Speech Bubble").triggered.connect(lambda: self.set_mode("speech_bubble"))
+        
+        # Add new diagram and database shapes
+        shapes_menu.addSeparator()
+        shapes_menu.addAction("🔷 Database Table").triggered.connect(lambda: self.set_mode("db_table"))
+        shapes_menu.addAction("🔷 Entity").triggered.connect(lambda: self.set_mode("entity"))
+        shapes_menu.addAction("🔷 Relationship").triggered.connect(lambda: self.set_mode("relationship"))
+        shapes_menu.addAction("🔷 Note").triggered.connect(lambda: self.set_mode("note"))
+        shapes_menu.addAction("🔷 Component").triggered.connect(lambda: self.set_mode("component"))
+        shapes_menu.addAction("🔷 Class").triggered.connect(lambda: self.set_mode("class"))
+        shapes_menu.addAction("🔷 Use Case").triggered.connect(lambda: self.set_mode("use_case"))
+        
+        # Add connection lines
+        shapes_menu.addSeparator()
+        shapes_menu.addAction("🔗 Orthogonal Line").triggered.connect(lambda: self.set_mode("orthogonal_line"))
+        shapes_menu.addAction("🔗 Curved Connection").triggered.connect(lambda: self.set_mode("curved_connection"))
+        shapes_menu.addAction("🔗 Dashed Line").triggered.connect(lambda: self.set_mode("dashed_line"))
+        shapes_menu.addAction("🔗 Elbow Connector").triggered.connect(lambda: self.set_mode("elbow_connector"))
+        
+        return shapes_menu
+    
     # Methods for original toolbar compatibility
     def hide_toolbar_permanent_func(self):
-        """Hide toolbar permanently until restored"""
+        """Hide toolbar permanently and update system tray"""
         self.is_hidden = True
         self.toolbar_last_pos = self.toolbar.pos()
         self.toolbar.hide()
-        self.hide_handle.move(10, 10)
-        self.hide_handle.show()
+        # Update system tray menu
+        self.update_tray_menu()
+        print("📌 Toolbar hidden - system tray updated")
         
     def clear_canvas_func(self):
         """Clear all canvas drawings"""
@@ -729,7 +2264,9 @@ class TutorCanvas(QWidget):
             self.finish_text(self.input_box_pos)
         self.input_box_pos = pos
         self.input_box = QLineEdit(self)
-        self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: 20px; padding: 5px;")
+        font_weight = "bold" if self.current_text_bold else "normal"
+        font_style = "italic" if self.current_text_italic else "normal"
+        self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: {self.current_text_size}px; font-weight: {font_weight}; font-style: {font_style}; padding: 5px;")
         self.input_box.move(int(pos.x()), int(pos.y()))
         self.input_box.show()
         self.input_box.setFocus()
@@ -741,12 +2278,38 @@ class TutorCanvas(QWidget):
             if txt.strip():
                 # Create text shape with current font properties
                 shape = TutorShape("text", pos, self.current_color, self.current_thickness, txt,
-                                 font_size=22, font_bold=False, font_italic=False)
+                                 font_size=self.current_text_size, font_bold=self.current_text_bold, font_italic=self.current_text_italic)
                 self.shapes.append(shape)
                 self.save_state()
             self.input_box.deleteLater()
             self.input_box = None
             self.update()
+    
+    def edit_text_shape(self, shape, pos):
+        """Edit an existing text shape"""
+        if self.input_box:
+            self.input_box.deleteLater()
+        
+        self.input_box_pos = pos
+        self.input_box = QLineEdit(self)
+        self.input_box.setText(shape.text)
+        self.input_box.setStyleSheet(f"border: 1px dashed #6965db; background: white; color: {self.current_color.name()}; font-size: {shape.font_size}px; padding: 5px;")
+        self.input_box.move(int(pos.x()), int(pos.y()))
+        self.input_box.show()
+        self.input_box.selectAll()
+        self.input_box.setFocus()
+        
+        def finish_editing():
+            if self.input_box:
+                new_text = self.input_box.text()
+                if new_text.strip():
+                    shape.text = new_text
+                    self.save_state()
+                self.input_box.deleteLater()
+                self.input_box = None
+                self.update()
+        
+        self.input_box.editingFinished.connect(finish_editing)
 
     def clear_canvas(self):
         self.shapes = []
@@ -838,7 +2401,22 @@ class TutorCanvas(QWidget):
                 continue
             w = self.current_thickness if not hasattr(s, 'thickness') else s.thickness
             w = w + 2 if s.is_selected else w
-            painter.setPen(QPen(s.color, w, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            
+            # Determine line style based on current setting
+            line_style = getattr(self, 'current_line_style', 'solid')
+            
+            if line_style == 'dashed':
+                pen = QPen(s.color, w, Qt.DashLine, Qt.RoundCap, Qt.RoundJoin)
+            elif line_style == 'hand_drawn':
+                # For hand-drawn effect, use a custom dash pattern
+                pen = QPen(s.color, w, Qt.CustomDashLine, Qt.RoundCap, Qt.RoundJoin)
+                # Create a pattern that mimics hand-drawn style
+                dash_pattern = [4, 4]  # Customize this for different hand-drawn effects
+                pen.setDashPattern(dash_pattern)
+            else:  # solid
+                pen = QPen(s.color, w, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            
+            painter.setPen(pen)
             
             if s.fill_color:
                 painter.setBrush(QBrush(s.fill_color))
@@ -890,8 +2468,316 @@ class TutorCanvas(QWidget):
                 painter.drawEllipse(s.points[0], radius, radius)
             elif s.mode == "diamond":
                 r = QRectF(s.points[0], s.end_pos).normalized()
-                painter.drawPolygon([QPointF(r.center().x(), r.top()), QPointF(r.right(), r.center().y()), 
-                                   QPointF(r.center().x(), r.bottom()), QPointF(r.left(), r.center().y())])
+                diamond_points = [QPointF(r.center().x(), r.top()), QPointF(r.right(), r.center().y()), 
+                                   QPointF(r.center().x(), r.bottom()), QPointF(r.left(), r.center().y())]
+                diamond_polygon = QPolygonF(diamond_points)
+                painter.drawPolygon(diamond_polygon)
+            elif s.mode == "arrow":
+                # Draw arrow shape
+                start = s.points[0]
+                end = s.end_pos
+                
+                # Draw the line
+                painter.drawLine(start, end)
+                
+                # Calculate arrowhead
+                dx = end.x() - start.x()
+                dy = end.y() - start.y()
+                length = math.sqrt(dx*dx + dy*dy)
+                
+                if length > 0:
+                    # Normalize direction vector
+                    unit_dx = dx / length
+                    unit_dy = dy / length
+                    
+                    # Arrowhead size
+                    arrow_size = 10 + w  # Make arrowhead proportional to line width
+                    
+                    # Calculate arrowhead points
+                    arrow_angle = math.pi / 6  # 30 degrees
+                    cos_angle = math.cos(arrow_angle)
+                    sin_angle = math.sin(arrow_angle)
+                    
+                    # Perpendicular vectors for arrowhead
+                    perp_dx = -unit_dy
+                    perp_dy = unit_dx
+                    
+                    # Arrowhead tip at the end point
+                    tip = end
+                    
+                    # Arrowhead base points
+                    left_base_x = end.x() - arrow_size * (unit_dx * cos_angle + perp_dx * sin_angle)
+                    left_base_y = end.y() - arrow_size * (unit_dy * cos_angle + perp_dy * sin_angle)
+                    right_base_x = end.x() - arrow_size * (unit_dx * cos_angle - perp_dx * sin_angle)
+                    right_base_y = end.y() - arrow_size * (unit_dy * cos_angle - perp_dy * sin_angle)
+                    
+                    left_point = QPointF(left_base_x, left_base_y)
+                    right_point = QPointF(right_base_x, right_base_y)
+                    
+                    # Draw arrowhead
+                    polygon = QPolygonF([tip, left_point, right_point])
+                    painter.drawPolygon(polygon)
+            elif s.mode == "triangle":
+                # Draw triangle shape
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                triangle_points = [QPointF(r.center().x(), r.top()), 
+                                   QPointF(r.right(), r.bottom()), 
+                                   QPointF(r.left(), r.bottom())]
+                triangle_polygon = QPolygonF(triangle_points)
+                painter.drawPolygon(triangle_polygon)
+            elif s.mode == "hexagon":
+                # Draw hexagon shape
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                center = r.center()
+                width = r.width()
+                height = r.height()
+                points = []
+                for i in range(6):
+                    angle = 2 * math.pi * i / 6
+                    x = center.x() + (width/2) * math.cos(angle)
+                    y = center.y() + (height/2) * math.sin(angle)
+                    points.append(QPointF(x, y))
+                hexagon_polygon = QPolygonF(points)
+                painter.drawPolygon(hexagon_polygon)
+            elif s.mode == "pentagon":
+                # Draw pentagon shape
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                center = r.center()
+                width = r.width()
+                height = r.height()
+                points = []
+                for i in range(5):
+                    angle = 2 * math.pi * i / 5 - math.pi/2  # Start from top
+                    x = center.x() + (width/2) * math.cos(angle)
+                    y = center.y() + (height/2) * math.sin(angle)
+                    points.append(QPointF(x, y))
+                pentagon_polygon = QPolygonF(points)
+                painter.drawPolygon(pentagon_polygon)
+            elif s.mode == "octagon":
+                # Draw octagon shape
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                center = r.center()
+                width = r.width()
+                height = r.height()
+                points = []
+                for i in range(8):
+                    angle = 2 * math.pi * i / 8
+                    x = center.x() + (width/2) * math.cos(angle)
+                    y = center.y() + (height/2) * math.sin(angle)
+                    points.append(QPointF(x, y))
+                octagon_polygon = QPolygonF(points)
+                painter.drawPolygon(octagon_polygon)
+            elif s.mode == "star":
+                # Draw star shape (5-pointed)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                center = r.center()
+                outer_radius = min(r.width(), r.height()) / 2
+                inner_radius = outer_radius * 0.4
+                points = []
+                for i in range(10):
+                    angle = math.pi * i / 5 - math.pi/2
+                    radius = outer_radius if i % 2 == 0 else inner_radius
+                    x = center.x() + radius * math.cos(angle)
+                    y = center.y() + radius * math.sin(angle)
+                    points.append(QPointF(x, y))
+                star_polygon = QPolygonF(points)
+                painter.drawPolygon(star_polygon)
+            elif s.mode == "double_arrow":
+                # Draw double arrow (arrow at both ends)
+                start = s.points[0]
+                end = s.end_pos
+                
+                # Draw the line
+                painter.drawLine(start, end)
+                
+                # Calculate arrowheads for both ends
+                dx = end.x() - start.x()
+                dy = end.y() - start.y()
+                length = math.sqrt(dx*dx + dy*dy)
+                
+                if length > 0:
+                    unit_dx = dx / length
+                    unit_dy = dy / length
+                    arrow_size = 10 + w
+                    arrow_angle = math.pi / 6
+                    cos_angle = math.cos(arrow_angle)
+                    sin_angle = math.sin(arrow_angle)
+                    perp_dx = -unit_dy
+                    perp_dy = unit_dx
+                    
+                    # Arrowhead at end point
+                    tip_end = end
+                    left_end_x = end.x() - arrow_size * (unit_dx * cos_angle + perp_dx * sin_angle)
+                    left_end_y = end.y() - arrow_size * (unit_dy * cos_angle + perp_dx * sin_angle)
+                    right_end_x = end.x() - arrow_size * (unit_dx * cos_angle - perp_dx * sin_angle)
+                    right_end_y = end.y() - arrow_size * (unit_dy * cos_angle - perp_dy * sin_angle)
+                    
+                    # Arrowhead at start point
+                    tip_start = start
+                    left_start_x = start.x() + arrow_size * (unit_dx * cos_angle + perp_dx * sin_angle)
+                    left_start_y = start.y() + arrow_size * (unit_dy * cos_angle + perp_dy * sin_angle)
+                    right_start_x = start.x() + arrow_size * (unit_dx * cos_angle - perp_dx * sin_angle)
+                    right_start_y = start.y() + arrow_size * (unit_dy * cos_angle - perp_dy * sin_angle)
+                    
+                    # Draw both arrowheads
+                    end_arrow_polygon = QPolygonF([tip_end, QPointF(left_end_x, left_end_y), QPointF(right_end_x, right_end_y)])
+                    start_arrow_polygon = QPolygonF([tip_start, QPointF(left_start_x, left_start_y), QPointF(right_start_x, right_start_y)])
+                    painter.drawPolygon(end_arrow_polygon)
+                    painter.drawPolygon(start_arrow_polygon)
+            elif s.mode == "curved_arrow":
+                # Draw curved arrow
+                start = s.points[0]
+                end = s.end_pos
+                
+                # Create a curved path
+                path = QPainterPath()
+                path.moveTo(start)
+                
+                # Control point for the curve
+                ctrl_x = (start.x() + end.x()) / 2
+                ctrl_y = min(start.y(), end.y()) - 50  # Curve upward
+                path.quadTo(QPointF(ctrl_x, ctrl_y), end)
+                
+                painter.drawPath(path)
+                
+                # Draw arrowhead at the end
+                # Simple arrowhead for curved arrow
+                painter.drawLine(end.x() - 10, end.y() - 5, end.x(), end.y())
+                painter.drawLine(end.x() - 10, end.y() + 5, end.x(), end.y())
+            elif s.mode == "cloud":
+                # Draw cloud shape
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                painter.drawEllipse(int(r.left()), int(r.top()), int(r.width()/3), int(r.height()/2))
+                painter.drawEllipse(int(r.left() + r.width()/3), int(r.top() - r.height()/4), int(r.width()/3), int(r.height()/2))
+                painter.drawEllipse(int(r.left() + 2*r.width()/3), int(r.top()), int(r.width()/3), int(r.height()/2))
+                painter.drawEllipse(int(r.left() + r.width()/6), int(r.top() + r.height()/4), int(r.width()/2), int(r.height()/2))
+            elif s.mode == "callout":
+                # Draw callout shape (rectangle with tail)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                # Draw main rectangle
+                painter.drawRect(r)
+                # Draw tail
+                tail_start = QPointF(r.center().x(), r.bottom())
+                tail_end = QPointF(r.center().x() + 20, r.bottom() + 20)
+                painter.drawLine(tail_start, tail_end)
+            elif s.mode == "speech_bubble":
+                # Draw speech bubble
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                # Draw main ellipse
+                painter.drawEllipse(r)
+                # Draw tail
+                tail_start = QPointF(r.right() - 20, r.bottom() - 10)
+                tail_end = QPointF(r.right() + 10, r.bottom() + 10)
+                painter.drawLine(tail_start, tail_end)
+            elif s.mode == "db_table":
+                # Draw database table (rectangle with header)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                # Draw main rectangle
+                painter.drawRect(r)
+                # Draw header separator
+                header_height = r.height() * 0.25
+                painter.drawLine(QPointF(r.left(), r.top() + header_height), QPointF(r.right(), r.top() + header_height))
+                # Draw column separators
+                col_width = r.width() / 3
+                for i in range(1, 3):
+                    x = r.left() + i * col_width
+                    painter.drawLine(QPointF(x, r.top() + header_height), QPointF(x, r.bottom()))
+            elif s.mode == "entity":
+                # Draw entity (rectangle with bold border)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                # Save current pen
+                old_pen = painter.pen()
+                # Make border thicker for entity
+                thick_pen = QPen(old_pen.color(), old_pen.width() + 2)
+                painter.setPen(thick_pen)
+                painter.drawRect(r)
+                # Restore pen
+                painter.setPen(old_pen)
+            elif s.mode == "relationship":
+                # Draw relationship (diamond shape)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                center = r.center()
+                diamond_points = [QPointF(center.x(), r.top()),
+                                  QPointF(r.right(), center.y()),
+                                  QPointF(center.x(), r.bottom()),
+                                  QPointF(r.left(), center.y())]
+                diamond_polygon = QPolygonF(diamond_points)
+                painter.drawPolygon(diamond_polygon)
+            elif s.mode == "note":
+                # Draw note (rectangle with folded corner)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                # Draw main rectangle
+                painter.drawRect(r)
+                # Draw folded corner
+                corner_size = min(r.width(), r.height()) * 0.2
+                fold_points = [QPointF(r.right(), r.top() + corner_size),
+                               QPointF(r.right() - corner_size, r.top()),
+                               QPointF(r.right() - corner_size, r.top() + corner_size)]
+                fold_polygon = QPolygonF(fold_points)
+                painter.drawPolygon(fold_polygon)
+            elif s.mode == "component":
+                # Draw component (rectangle with icon)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                painter.drawRect(r)
+                # Draw simple component icon
+                icon_size = min(r.width(), r.height()) * 0.3
+                icon_rect = QRectF(r.center().x() - icon_size/2, r.center().y() - icon_size/2, icon_size, icon_size)
+                painter.drawEllipse(icon_rect)
+            elif s.mode == "class":
+                # Draw UML class (rectangle with three sections)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                painter.drawRect(r)
+                # Draw section separators
+                section_height = r.height() / 3
+                for i in range(1, 3):
+                    y = r.top() + i * section_height
+                    painter.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+            elif s.mode == "use_case":
+                # Draw use case (ellipse)
+                r = QRectF(s.points[0], s.end_pos).normalized()
+                painter.drawEllipse(r)
+            elif s.mode in ["orthogonal_line", "curved_connection", "dashed_line", "elbow_connector"]:
+                # Draw connection lines
+                start = s.points[0]
+                end = s.end_pos
+                
+                if s.mode == "orthogonal_line":
+                    # Draw orthogonal connection (right angles)
+                    mid_x = (start.x() + end.x()) / 2
+                    painter.drawLine(int(start.x()), int(start.y()), int(mid_x), int(start.y()))
+                    painter.drawLine(int(mid_x), int(start.y()), int(mid_x), int(end.y()))
+                    painter.drawLine(int(mid_x), int(end.y()), int(end.x()), int(end.y()))
+                elif s.mode == "curved_connection":
+                    # Draw curved connection
+                    path = QPainterPath()
+                    path.moveTo(start)
+                    ctrl_x = (start.x() + end.x()) / 2
+                    ctrl_y = min(start.y(), end.y()) - 30
+                    path.quadTo(QPointF(ctrl_x, ctrl_y), end)
+                    painter.drawPath(path)
+                elif s.mode == "dashed_line":
+                    # Draw dashed line
+                    old_style = painter.pen().style()
+                    pen = painter.pen()
+                    pen.setStyle(Qt.DashLine)
+                    painter.setPen(pen)
+                    painter.drawLine(start, end)
+                    pen.setStyle(old_style)
+                    painter.setPen(pen)
+                elif s.mode == "elbow_connector":
+                    # Draw elbow connector (L-shape)
+                    if abs(end.x() - start.x()) > abs(end.y() - start.y()):
+                        # Horizontal first
+                        mid_x = (start.x() + end.x()) / 2
+                        painter.drawLine(int(start.x()), int(start.y()), int(mid_x), int(start.y()))
+                        painter.drawLine(int(mid_x), int(start.y()), int(mid_x), int(end.y()))
+                        painter.drawLine(int(mid_x), int(end.y()), int(end.x()), int(end.y()))
+                    else:
+                        # Vertical first
+                        mid_y = (start.y() + end.y()) / 2
+                        painter.drawLine(int(start.x()), int(start.y()), int(start.x()), int(mid_y))
+                        painter.drawLine(int(start.x()), int(mid_y), int(end.x()), int(mid_y))
+                        painter.drawLine(int(end.x()), int(mid_y), int(end.x()), int(end.y()))
 
         # Enhanced Smooth Laser Rendering
         now = time.monotonic()
@@ -1191,6 +3077,16 @@ class TutorCanvas(QWidget):
                 if math.hypot(point.x() - p.x(), point.y() - p.y()) < 15:  # 15 pixel tolerance
                     return True
             return False
+        elif shape.mode in ["db_table", "entity", "relationship", "note", "component", "class", "use_case"]:
+            # For diagram shapes, use rectangular bounding box
+            rect = QRectF(shape.points[0], shape.end_pos).normalized()
+            return rect.contains(point)
+        elif shape.mode in ["orthogonal_line", "curved_connection", "dashed_line", "elbow_connector"]:
+            # For connection lines, check if point is near the line
+            p1, p2 = shape.points[0], shape.end_pos
+            # Simple distance check for lines
+            dist = ((point.x() - p1.x()) * (p2.y() - p1.y()) - (point.y() - p1.y()) * (p2.x() - p1.x())) / math.sqrt((p2.x() - p1.x())**2 + (p2.y() - p1.y())**2)
+            return abs(dist) < 10  # 10 pixel tolerance
         return False
 
     def get_text_shape_at_position(self, pos):
@@ -1301,6 +3197,14 @@ class TutorCanvas(QWidget):
             # Now check if clicked on any shape
             for s in reversed(self.shapes):
                 if self.is_point_in_shape(s, pos):
+                    # Check if it's a text shape and handle double-click for editing
+                    if s.mode == "text" and hasattr(self, 'last_click_time') and hasattr(self, 'last_click_pos'):
+                        current_time = time.time()
+                        if (current_time - self.last_click_time < 0.5 and  # Double click within 500ms
+                            math.hypot(pos.x() - self.last_click_pos.x(), pos.y() - self.last_click_pos.y()) < 10):  # Close position
+                            self.edit_text_shape(s, s.points[0])
+                            return
+                    
                     # Deselect any other selected shapes
                     for other_shape in self.shapes:
                         other_shape.is_selected = False
@@ -1315,6 +3219,10 @@ class TutorCanvas(QWidget):
                             self.original_shape_end_pos = QPointF(s.end_pos)
                         self.original_bounding_rect = self.calculate_shape_bounding_rect(s)
                     self.last_pos = pos
+                    
+                    # Store click information for double-click detection
+                    self.last_click_time = time.time()
+                    self.last_click_pos = QPointF(pos)
                     break
             else:
                 # Clicked on empty space - deselect all
@@ -1440,33 +3348,33 @@ class TutorCanvas(QWidget):
         self.update()
 
     def keyPressEvent(self, event):
-        # Handle Ctrl+ combinations for tool switching
-        if event.modifiers() & Qt.ControlModifier:
-            ctrl_pressed = True
-            key_text = event.text().upper() if event.text() else ""
-            
-            # Build the shortcut string
-            if ctrl_pressed and key_text:
-                # Handle Shift modifier
-                if event.modifiers() & Qt.ShiftModifier:
-                    shortcut_str = f"Ctrl+Shift+{key_text}"
-                else:
-                    shortcut_str = f"Ctrl+{key_text}"
-                
-                # Check if this shortcut matches any tool
-                for mode, shortcut in self.shortcuts.items():
-                    if shortcut.upper() == shortcut_str.upper():
-                        self.set_mode(mode)
-                        event.accept()
-                        return
+        # Handle all shortcut combinations for tool switching
+        key_text = event.text().upper() if event.text() else ""
         
-        # Handle single character shortcuts (fallback)
-        key = event.text().upper()
-        for mode, shortcut in self.shortcuts.items():
-            if key == shortcut.upper():
-                self.set_mode(mode)
-                event.accept()
-                return
+        # Build the shortcut string based on modifiers
+        shortcut_parts = []
+        
+        if event.modifiers() & Qt.ControlModifier:
+            shortcut_parts.append("Ctrl")
+        if event.modifiers() & Qt.ShiftModifier:
+            shortcut_parts.append("Shift")
+        if event.modifiers() & Qt.AltModifier:
+            shortcut_parts.append("Alt")
+        
+        # Add the key character
+        if key_text and key_text.isalpha():
+            shortcut_parts.append(key_text)
+        
+        # Create full shortcut string
+        if shortcut_parts:
+            shortcut_str = "+".join(shortcut_parts)
+            
+            # Check if this shortcut matches any tool
+            for mode, shortcut in self.shortcuts.items():
+                if shortcut.upper() == shortcut_str.upper():
+                    self.set_mode(mode)
+                    event.accept()
+                    return
         
         # Handle special keys
         if event.key() == Qt.Key_Escape:
@@ -1475,6 +3383,9 @@ class TutorCanvas(QWidget):
             self.undo()
         elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
             self.redo()
+        elif event.key() == Qt.Key_B and event.modifiers() & Qt.ControlModifier and event.modifiers() & Qt.ShiftModifier:
+            # Toggle board mode with Ctrl+Shift+B
+            self.quick_toggle_board()
         elif event.key() == Qt.Key_H and event.modifiers() & Qt.ControlModifier and event.modifiers() & Qt.ShiftModifier:
             # Toggle toolbar hide/unhide with Ctrl+Shift+H
             self.toggle_toolbar_visibility()

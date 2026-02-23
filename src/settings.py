@@ -110,10 +110,14 @@ class SettingsDialog(QDialog):
         layout.addSpacing(5)
         layout.addWidget(self._section_label("🎹 SHORTCUTS"))
         
-        for action, key in list(self.canvas.shortcuts.items())[:10]:
+        # Show all shortcuts including the new ones
+        shortcut_items = list(self.canvas.shortcuts.items())
+        for action, key in shortcut_items:
             row = QHBoxLayout()
-            lbl = QLabel(action.title())
-            lbl.setFixedWidth(150)
+            # Format the action name for better display
+            display_name = action.replace("_", " ").title()
+            lbl = QLabel(display_name)
+            lbl.setFixedWidth(180)
             row.addWidget(lbl)
             ks = QKeySequenceEdit(QKeySequence(key))
             ks.editingFinished.connect(lambda a=action, k=ks: self.canvas.shortcuts.update({a: k.keySequence().toString()}))
@@ -214,11 +218,70 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
         
+        # Reset shortcuts button
+        reset_shortcuts_btn = QPushButton("↺ Reset All Shortcuts to Defaults")
+        reset_shortcuts_btn.setCursor(Qt.PointingHandCursor)
+        reset_shortcuts_btn.setStyleSheet("""
+            QPushButton {
+                background: #ff6b6b;
+                color: white;
+                border-radius: 12px;
+                padding: 12px;
+                font-weight: bold;
+                border: none;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }
+            QPushButton:hover {
+                background: #ff5252;
+            }
+        """)
+        reset_shortcuts_btn.clicked.connect(self.reset_shortcuts_to_defaults)
+        layout.addWidget(reset_shortcuts_btn)
+        
         save_btn = QPushButton("Save & Close")
         save_btn.setCursor(Qt.PointingHandCursor)
         save_btn.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6965db, stop:1 #8b87ff); color: white; border-radius: 12px; padding: 14px; font-weight: bold; border: none; font-size: 15px;")
         save_btn.clicked.connect(self.save_and_close)
         layout.addWidget(save_btn)
+        
+        # Add save paths section
+        layout.addSpacing(15)
+        layout.addWidget(self._section_label("📁 SAVE LOCATIONS"))
+        
+        # Screenshots path
+        screenshots_row = QHBoxLayout()
+        screenshots_label = QLabel("Screenshots Path:")
+        screenshots_label.setFixedWidth(120)
+        screenshots_row.addWidget(screenshots_label)
+        
+        self.screenshots_path_input = QLabel()
+        self.screenshots_path_input.setText(self.canvas.screenshots_path)
+        self.screenshots_path_input.setStyleSheet(f"color: {text_color}; background: {secondary_color}; padding: 5px; border-radius: 5px; border: 1px solid {border_color};")
+        screenshots_row.addWidget(self.screenshots_path_input)
+        
+        screenshots_browse_btn = QPushButton("Browse")
+        screenshots_browse_btn.clicked.connect(self.browse_screenshots_path)
+        screenshots_row.addWidget(screenshots_browse_btn)
+        
+        layout.addLayout(screenshots_row)
+        
+        # Videos path
+        videos_row = QHBoxLayout()
+        videos_label = QLabel("Videos Path:")
+        videos_label.setFixedWidth(120)
+        videos_row.addWidget(videos_label)
+        
+        self.videos_path_input = QLabel()
+        self.videos_path_input.setText(self.canvas.videos_path)
+        self.videos_path_input.setStyleSheet(f"color: {text_color}; background: {secondary_color}; padding: 5px; border-radius: 5px; border: 1px solid {border_color};")
+        videos_row.addWidget(self.videos_path_input)
+        
+        videos_browse_btn = QPushButton("Browse")
+        videos_browse_btn.clicked.connect(self.browse_videos_path)
+        videos_row.addWidget(videos_browse_btn)
+        
+        layout.addLayout(videos_row)
 
     def _section_label(self, text):
         lbl = QLabel(text)
@@ -231,6 +294,32 @@ class SettingsDialog(QDialog):
             self.canvas.laser_color = c.name()
             self.c_btn.setStyleSheet(f"background: {c.name()}; border-radius: 8px; border: 2px solid #ccc;")
     
+    def reset_shortcuts_to_defaults(self):
+        """Reset all shortcuts to their default values"""
+        # Define default shortcuts
+        default_shortcuts = {
+            "mouse": "Ctrl+Alt+M", "select": "Ctrl+Alt+V", "pencil": "Ctrl+Alt+P", 
+            "rect": "Ctrl+Alt+R", "ellipse": "Ctrl+Alt+E", "arrow": "Ctrl+Alt+A", 
+            "text": "Ctrl+Alt+T", "eraser": "Ctrl+Alt+X", "clear": "Ctrl+Alt+C",
+            "hide_show": "Ctrl+Alt+H", "toggle_board": "Ctrl+Alt+B", "undo": "Ctrl+Alt+Z", 
+            "redo": "Ctrl+Alt+Y", "full_screenshot": "Ctrl+Alt+S", "area_screenshot": "Ctrl+Alt+Shift+S",
+            "long_screenshot": "Ctrl+Alt+L", "scrolling_screenshot": "Ctrl+Alt+Shift+L",
+            "toggle_recording": "Ctrl+Alt+Rec", "record_area": "Ctrl+Alt+Shift+Rec",
+            "toggle_fill": "Ctrl+Alt+F"
+        }
+        
+        # Update canvas shortcuts
+        self.canvas.shortcuts.update(default_shortcuts)
+        
+        # Show confirmation
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Shortcuts Reset", "All shortcuts have been reset to their default values.")
+        
+        # Close and reopen settings to refresh the display
+        self.accept()
+        new_settings = SettingsDialog(self.canvas, self.parent())
+        new_settings.exec_()
+    
     def save_and_close(self):
         self.canvas.default_thickness = self.thick_spin.value()
         self.canvas.enable_fill = self.fill_check.isChecked()
@@ -242,3 +331,27 @@ class SettingsDialog(QDialog):
         if hasattr(self.canvas, 'apply_theme'):
             self.canvas.apply_theme(new_theme)
         self.accept()
+        
+    def browse_screenshots_path(self):
+        from PyQt5.QtWidgets import QFileDialog
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Screenshots Directory", 
+            self.canvas.screenshots_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if directory:
+            self.canvas.screenshots_path = directory
+            self.screenshots_path_input.setText(directory)
+            
+    def browse_videos_path(self):
+        from PyQt5.QtWidgets import QFileDialog
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Videos Directory", 
+            self.canvas.videos_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if directory:
+            self.canvas.videos_path = directory
+            self.videos_path_input.setText(directory)

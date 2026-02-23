@@ -223,30 +223,4 @@ class ThemedIconButton(QPushButton):
             self.set_selected(True)
 
 
-# Predefined shortcuts dictionary
-SHORTCUTS = {
-    "mouse": "Ctrl+M",
-    "select": "Ctrl+A", 
-    "pencil": "Ctrl+P",
-    "shape_rect": "Ctrl+R",
-    "shape_diamond": "Ctrl+D",
-    "shape_ellipse": "Ctrl+E",
-    "shape_arrow": "Ctrl+N",
-    "text": "Ctrl+T",
-    "laser": "Ctrl+L",
-    "eraser": "Ctrl+X",
-    "undo": "Ctrl+Z",
-    "redo": "Ctrl+Y",
-    "board": "Ctrl+B",
-    "transparency": "Ctrl+Shift+T",
-    "capture": "Ctrl+Shift+C",
-    "settings": "Ctrl+,",
-    "hide": "Ctrl+H",
-    "more": "Ctrl+Shift+M",
-    "exit": "Ctrl+Q"
-}
-
-
-def get_shortcut(icon_name):
-    """Get the keyboard shortcut for an icon"""
-    return SHORTCUTS.get(icon_name, "")
+# Obsolete shortcut system - using canvas.shortcuts instead (cleaned up)

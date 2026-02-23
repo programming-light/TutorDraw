@@ -252,29 +252,37 @@ class TutorToolbar(QWidget):
                  ("laser", "laser", "Laser Pointer"),
                  ("zoom", "zoom", "Zoom Area"),
                  ("eraser", "eraser", "Eraser"),
-                 ("text", "text", "Text")]
+                 ("text", "text", "Text"),
+                 ("capture", "capture", "Capture Screen"),
+                 ("record", "record", "Record Screen")]
         
         for icon_name, mode, tip in tools:
             btn = IconButton(icon_name, tip, "")  # Pass empty shortcut, will be updated via tooltip
-            btn.clicked.connect(lambda checked=False, m=mode: self.canvas.set_mode(m))
+            
+            # Special handling for capture and record buttons
+            if mode == "capture":
+                btn.clicked.connect(self.show_capture_menu)
+            elif mode == "record":
+                btn.clicked.connect(self.show_record_menu)
+            else:
+                btn.clicked.connect(lambda checked=False, m=mode: self.canvas.set_mode(m))
+                
             inner.addWidget(btn)
             self.btns[mode] = btn
         
         # Update tooltips with current shortcuts from canvas
         self.update_tooltips()
 
-        # Fill toggle button
-        self.fill_btn = IconButton("fill", "Fill Mode", "")
-        self.fill_btn.setCheckable(True)
-        self.fill_btn.clicked.connect(self.toggle_fill_mode)
-        inner.addWidget(self.fill_btn)
-        self.btns['fill'] = self.fill_btn
+        # Fill mode is now in sidebar, removed from main toolbar
 
-        # Board toggle button
+        # Board button using the SVG icon
         board_btn = IconButton("board", "Toggle Board", "")
         board_btn.clicked.connect(self.canvas.toggle_board)
+        
         inner.addWidget(board_btn)
         self.btns['board'] = board_btn
+        
+
 
         # Color Palette Panel
         inner.addSpacing(6)
@@ -373,6 +381,103 @@ class TutorToolbar(QWidget):
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.oldPos = event.globalPos()
 
+    def show_capture_menu(self):
+        """Show capture options dropdown menu"""
+        menu = QMenu(self)
+        
+        # Apply theme to menu
+        if self.canvas.current_theme == "dark":
+            menu.setStyleSheet("""
+                QMenu { 
+                    background-color: #2d2d2d; 
+                    color: white; 
+                    border: 1px solid #555555;
+                }
+                QMenu::item { 
+                    background-color: transparent; 
+                    padding: 8px 20px; 
+                    color: white;
+                }
+                QMenu::item:selected { 
+                    background-color: #3e3e3e; 
+                }
+            """)
+        else:  # light theme
+            menu.setStyleSheet("""
+                QMenu { 
+                    background-color: white; 
+                    color: black; 
+                    border: 1px solid #d1d1d1;
+                }
+                QMenu::item { 
+                    background-color: transparent; 
+                    padding: 8px 20px; 
+                    color: black;
+                }
+                QMenu::item:selected { 
+                    background-color: #f0f0f0; 
+                }
+            """)
+        
+        # Capture options
+        menu.addAction("🖼️ Full Screen").triggered.connect(self.canvas.capture_full_screen_screenshot)
+        menu.addAction("✂️ Area Selection").triggered.connect(self.canvas.capture_area_screenshot)
+        menu.addAction("🔄 Smart Scrolling").triggered.connect(self.canvas.capture_scrolling_screenshot)
+        menu.addAction("💻 Code Editor").triggered.connect(self.canvas.capture_code_editor_screenshot)
+        menu.addAction("🖥️ Window Capture").triggered.connect(self.canvas.capture_window_screenshot)
+        
+        # Show menu below the capture button
+        capture_btn = self.btns["capture"]
+        btn_pos = capture_btn.mapToGlobal(QPoint(0, capture_btn.height()))
+        menu.exec_(btn_pos)
+        
+    def show_record_menu(self):
+        """Show recording options dropdown menu"""
+        menu = QMenu(self)
+        
+        # Apply theme to menu
+        if self.canvas.current_theme == "dark":
+            menu.setStyleSheet("""
+                QMenu { 
+                    background-color: #2d2d2d; 
+                    color: white; 
+                    border: 1px solid #555555;
+                }
+                QMenu::item { 
+                    background-color: transparent; 
+                    padding: 8px 20px; 
+                    color: white;
+                }
+                QMenu::item:selected { 
+                    background-color: #3e3e3e; 
+                }
+            """)
+        else:  # light theme
+            menu.setStyleSheet("""
+                QMenu { 
+                    background-color: white; 
+                    color: black; 
+                    border: 1px solid #d1d1d1;
+                }
+                QMenu::item { 
+                    background-color: transparent; 
+                    padding: 8px 20px; 
+                    color: black;
+                }
+                QMenu::item:selected { 
+                    background-color: #f0f0f0; 
+                }
+            """)
+        
+        # Recording options
+        menu.addAction("🎥 Full Screen Record").triggered.connect(self.canvas.record_full_screen)
+        menu.addAction("🎬 Area Record").triggered.connect(self.canvas.record_area)
+        
+        # Show menu below the record button
+        record_btn = self.btns["record"]
+        btn_pos = record_btn.mapToGlobal(QPoint(0, record_btn.height()))
+        menu.exec_(btn_pos)
+        
     def show_more_menu(self):
         menu = QMenu(self)
         # Apply theme to menu
@@ -410,7 +515,12 @@ class TutorToolbar(QWidget):
             """)
         
         menu.addAction("⚙️ Settings").triggered.connect(self.canvas.open_settings)
+        menu.addAction("📋 Sidebar").triggered.connect(self.canvas.toggle_sidebar)
         menu.addAction("🗑️ Clear All").triggered.connect(self.canvas.clear_canvas)
+        
+        # Shapes submenu
+        shapes_menu = self.canvas.create_shapes_submenu()
+        menu.addMenu(shapes_menu)
         
         # Capture submenu
         capture_menu = QMenu("Capture", menu)
@@ -486,9 +596,10 @@ class TutorToolbar(QWidget):
 
     def toggle_fill_mode(self):
         """Toggle fill mode for shapes"""
-        self.canvas.fill_mode_enabled = not self.canvas.fill_mode_enabled
-        # Update button appearance
-        if self.canvas.fill_mode_enabled:
+        # Use the canvas's enable_fill attribute
+        self.canvas.enable_fill = not self.canvas.enable_fill
+        # Update button appearance based on current state
+        if self.canvas.enable_fill:
             self.fill_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #1a73e8;

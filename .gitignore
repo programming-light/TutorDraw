@@ -1,0 +1,341 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.spec
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+build_dist/
+*.exe
+*.app
+*.msi
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+*.apk
+*.ipa
+
+# PyInstaller output
+*.manifest
+*.resources
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Configuration files (uncomment if you want to ignore personal configs)
+# tutordraw_settings.json
+# tutordraw_config.json
+
+# Screenshots and recordings
+screenshots/
+recordings/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.avi
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+*,cover
+.cache
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# Poetry
+poetry.lock
+
+# PDM
+pdm.lock
+
+# PIP
+requirements*.txt
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+.env/
+
+# Conda
+conda-env.yml
+environment.yml
+
+# tox
+tox.ini
+.tox/
+
+# nox
+.nox/
+
+# pytest
+pytest_cache/
+.pytest_cache/
+
+# Coverage
+coverage.xml
+
+# Hypothesis
+.hypothesis/
+
+.jupyter/
+
+# SageMath parsed files
+*.sage.py
+
+
+
+
+
+
+
+
+# TutorDraw specific
+# Build directories
+build*/
+compile/
+release/
+
+# Platform specific builds
+windows_build/
+linux_build/
+macos_build/
+android_build/
+
+# Generated documentation
+docs/_build/
+
+# Test coverage
+
+# TutorDraw build artifacts
+build_enhanced.py.log
+build_wrapper.py.log
+
+# PyInstaller build outputs
+
+# Platform-specific build outputs
+# Windows
+*.bat.log
+
+# macOS
+*.pkg
+*.sh.log
+
+# Linux
+
+# Android
+*.aab
+
+# Temporary build directories
+temp_*
+*_temp
+build_temp/
+
+# Distribution packages
+packages/
+releases/
+artifacts/
+
+# Local configuration (uncomment if desired)
+# local_settings.py
+# config/local.py
+
+# Backup files
+*.bak
+*.backup
+
+# Merge files
+*.orig
+*.rej
+
+# Editor backup files
+.*.sw[op]
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+
+# Emacs
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# VSCode
+
+# IntelliJ IDEA
+*.iml
+*.iws
+*.ipr
+out/
+
+# XCode
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/*~
+*.pyc
+DerivedData/
+*.hmap
+*.xcarchive
+*.xccheckout
+*.xcscmblueprint
+
+# Android Studio
+.gradle
+captures/
+.local.properties
+*.ap_
+*.dex
+*.class
+*.jar
+*.war
+*.ear
+*.ane
+
+# Compiled source
+*.com
+*.dll
+*.o
+
+# Packages
+*.7z
+*.gz
+*.iso
+*.rar
+*.tar
+*.zip
+*.msp
+*.msm
+
+# Logs and databases
+*.sql
+
+# Additional patterns for TutorDraw
+*.log
+logs/
+temp/
+tmp/
+*.tmp
+*.temp
+screenshots/
+recordings/
+*.bak
+*.backup
+*~
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,6 +1,7 @@
 """
-Build configuration for TutorDraw application
-Supports Windows, macOS, Linux, and Android builds
+Enhanced Build configuration for TutorDraw application
+Supports Windows (32/64-bit), macOS, Linux (32/64-bit), and Android builds
+Includes portable and installer options with proper naming conventions
 """
 import sys
 import os
@@ -303,18 +304,60 @@ CMD ["python", "main.py"]
 
 
 def main():
-    """Run the optimization process"""
-    print("Optimizing TutorDraw for cross-platform deployment...")
+    """Run the complete automated build system"""
+    print("Starting TutorDraw Complete Automated Build System...")
+    print("Supporting: Windows (MSI), Linux (DEB/RPM/AppImage), macOS (DMG/PKG), Android (APK)")
+    print("Creating complete installer packages automatically")
     
-    create_build_scripts()
-    optimize_code_structure()
-    create_deployment_configs()
+    # Run the complete build system
+    import subprocess
     
-    print("\nOptimization complete!")
-    print("Next steps:")
-    print("1. Review the new code structure in the tutorDraw/ directory")
-    print("2. Run the appropriate build script from dist/")
-    print("3. Test the application on your target platforms")
+    # First create the installer scripts
+    print("\nStep 1: Creating installer build scripts...")
+    result1 = subprocess.run([sys.executable, "create_installers.py"], 
+                            capture_output=True, text=True)
+    
+    if result1.returncode != 0:
+        print("Error creating installer scripts:")
+        if result1.stderr:
+            print(result1.stderr)
+        return
+    
+    print("✓ Installer scripts created successfully!")
+    
+    # Now run the complete build
+    print("\nStep 2: Building complete installer packages...")
+    result2 = subprocess.run([sys.executable, "build_complete.py", "--platform", "all"], 
+                            capture_output=True, text=True)
+    
+    if result2.returncode == 0:
+        print("\n🎉 COMPLETE BUILD SUCCESSFUL! 🎉")
+        print("\nAll installer packages have been created:")
+        print("=======================================")
+        print("📁 OUTPUT DIRECTORIES:")
+        print("  Windows MSI installer:   build_dist/windows/installer/")
+        print("  Linux installers:        build_dist/linux/installer/")
+        print("    - DEB package (Ubuntu/Debian)")
+        print("    - RPM package (Fedora/RHEL)")
+        print("    - AppImage (Universal Linux)")
+        print("  macOS installers:        build_dist/macos/installer/")
+        print("    - DMG installer")
+        print("    - PKG installer")
+        print("  Android APK installer:   build_dist/android/installer/")
+        print()
+        print("🔧 USAGE:")
+        print("  Single command build:    python build.py")
+        print("  Build specific platform: python build_complete.py --platform windows|linux|macos|android")
+        print("  List all scripts:        python build_complete.py --list")
+        print()
+        print("📦 DISTRIBUTION READY!")
+        print("All packages are ready for distribution to end users.")
+    else:
+        print("❌ Build process encountered errors:")
+        if result2.stdout:
+            print("STDOUT:", result2.stdout)
+        if result2.stderr:
+            print("STDERR:", result2.stderr)
 
 
 if __name__ == "__main__":
